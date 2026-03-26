@@ -132,5 +132,49 @@ public class MainHook implements IXposedHookLoadPackage {
         } catch (Throwable t) {
             XposedBridge.log("Chaoxing AdSkip Error (Record Limit): " + t.getMessage());
         }
+        try {
+            Class<?> adapterClass = XposedHelpers.findClass(
+                    "com.chaoxing.mobile.chat.ui.ConversationAdapter",
+                    lpparam.classLoader
+            );
+
+            XposedBridge.hookAllMethods(adapterClass, "getView", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                    android.view.View itemView = (android.view.View) param.getResult();
+                    if (itemView == null) return;
+                    int position = (Integer) param.args[0];
+                    Object item = XposedHelpers.callMethod(param.thisObject, "getItem", position);
+
+                    if (item != null && item.getClass().getSimpleName().equals("ConversationInfo")) {
+                        int type = (Integer) XposedHelpers.callMethod(item, "getType");
+
+                        android.view.ViewGroup.LayoutParams layoutParams = itemView.getLayoutParams();
+                        if (layoutParams == null) {
+                            layoutParams = new android.widget.AbsListView.LayoutParams(
+                                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                            );
+                        }
+                        if (type == 20) {
+                            XposedBridge.log("Chaoxing AdSkip: Type 20 ads detected. Eliminating...");
+                            itemView.setVisibility(android.view.View.GONE);
+                            layoutParams.height = 1;
+                            itemView.setLayoutParams(layoutParams);
+                            itemView.setPadding(0, 0, 0, 0);
+                        } else {
+                            if (layoutParams.height == 1 || itemView.getVisibility() == android.view.View.GONE) {
+                                itemView.setVisibility(android.view.View.VISIBLE);
+                                layoutParams.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT; // -2
+                                itemView.setLayoutParams(layoutParams);
+                            }
+                        }
+                    }
+                }
+            });
+
+        } catch (Throwable t) {
+            XposedBridge.log("Chaoxing AdSkip Error (ChatList): " + t.getMessage());
+        }
     }
 }
