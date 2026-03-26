@@ -9,4 +9,6 @@ Disable Recommended Feeds: Blocks the infinite "Recommended" post stream at the 
 
 Expand Recent Records: Overrides the hardcoded limit of "Recently Used" items, increasing the visible count from 3 up to 10 to facilitate faster access to frequent resources.
 
+Remove ads in the message page
+
 Deep UI Cleanup: Automatically hides empty containers and specific title headers (such as the "Recommended" section) to ensure a seamless, native-looking interface.
