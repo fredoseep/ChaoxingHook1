@@ -1,5 +1,8 @@
 This is a lightweight enhancement module for the Chaoxing (Xuexitong) application based on the Xposed/LSPosed framework. It is designed to provide a cleaner, more efficient learning environment by removing intrusive advertisements and optimizing the layout for productivity.
 
+
+For non-root user ,you can try https://github.com/Katana-Official/SPatch-Update
+
 Key Features
 Bypass Splash Advertisements: Suppresses launch-screen ads by intercepting SplashViewModel and PromotionView logic, significantly reducing application startup time.
 
