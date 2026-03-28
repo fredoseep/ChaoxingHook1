@@ -3,9 +3,11 @@ package com.fredoseep.chaoxinghook;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -20,6 +22,17 @@ public class MainHook implements IXposedHookLoadPackage {
 
     private static final Set<String> hookedWebViewClients = new HashSet<>();
 
+    // 定义一个内部类来存储配置信息
+    private static class SignConfig {
+        boolean modifyLocation = false;
+        String longitude = "";
+        String latitude = "";
+        boolean modifyAddress = false;
+        String address = "";
+        boolean modifyName = false;
+        String name = "";
+    }
+
     @Override
     public void handleLoadPackage(LoadPackageParam lpparam) throws Throwable {
         if (!lpparam.packageName.equals("com.chaoxing.mobile")) {
@@ -28,10 +41,7 @@ public class MainHook implements IXposedHookLoadPackage {
 
         // ==================== 1. 启动页广告拦截 ====================
         try {
-            Class<?> splashViewModelClass = XposedHelpers.findClass(
-                    "com.chaoxing.mobile.activity.SplashViewModel",
-                    lpparam.classLoader
-            );
+            Class<?> splashViewModelClass = XposedHelpers.findClass("com.chaoxing.mobile.activity.SplashViewModel", lpparam.classLoader);
             XposedBridge.hookAllMethods(splashViewModelClass, "a", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
@@ -44,10 +54,7 @@ public class MainHook implements IXposedHookLoadPackage {
 
         // ==================== 2. 首页 Banner 拦截 ====================
         try {
-            Class<?> homePageHeaderClass = XposedHelpers.findClass(
-                    "com.chaoxing.mobile.study.home.mainpage.view.HomePageHeader",
-                    lpparam.classLoader
-            );
+            Class<?> homePageHeaderClass = XposedHelpers.findClass("com.chaoxing.mobile.study.home.mainpage.view.HomePageHeader", lpparam.classLoader);
             XposedBridge.hookAllMethods(homePageHeaderClass, "g", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
@@ -60,10 +67,7 @@ public class MainHook implements IXposedHookLoadPackage {
 
         // ==================== 3. 隐藏首页推荐栏 ====================
         try {
-            Class<?> categoryHolderClass = XposedHelpers.findClass(
-                    "com.chaoxing.mobile.study.home.mainpage2.adapter.viewholder.MainRecordCategoryHolder",
-                    lpparam.classLoader
-            );
+            Class<?> categoryHolderClass = XposedHelpers.findClass("com.chaoxing.mobile.study.home.mainpage2.adapter.viewholder.MainRecordCategoryHolder", lpparam.classLoader);
             XposedBridge.hookAllMethods(categoryHolderClass, "o", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
@@ -91,10 +95,7 @@ public class MainHook implements IXposedHookLoadPackage {
 
         // ==================== 4. 清空第一页帖子 ====================
         try {
-            Class<?> adapterClass = XposedHelpers.findClass(
-                    "com.chaoxing.mobile.study.home.mainpage2.adapter.MainPageRecordAdapter",
-                    lpparam.classLoader
-            );
+            Class<?> adapterClass = XposedHelpers.findClass("com.chaoxing.mobile.study.home.mainpage2.adapter.MainPageRecordAdapter", lpparam.classLoader);
             XposedBridge.hookAllMethods(adapterClass, "getItemCount", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
@@ -128,10 +129,7 @@ public class MainHook implements IXposedHookLoadPackage {
 
         // ==================== 6. 掐断特定对话类型 ====================
         try {
-            Class<?> q1Class = XposedHelpers.findClass(
-                    "com.chaoxing.mobile.chat.manager.q1",
-                    lpparam.classLoader
-            );
+            Class<?> q1Class = XposedHelpers.findClass("com.chaoxing.mobile.chat.manager.q1", lpparam.classLoader);
             XposedBridge.hookAllMethods(q1Class, "c1", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
@@ -153,7 +151,7 @@ public class MainHook implements IXposedHookLoadPackage {
             XposedBridge.log("Chaoxing AdSkip Error (q1.c1): " + t.getMessage());
         }
 
-        // ==================== 7. WebView 签到定位拦截 (精简生产版) ====================
+        // ==================== 7. WebView 签到定位拦截 (自定义参数版) ====================
         try {
             Class<?> webViewClass = XposedHelpers.findClass("android.webkit.WebView", lpparam.classLoader);
 
@@ -184,49 +182,77 @@ public class MainHook implements IXposedHookLoadPackage {
                                     }
                                 }
 
-                                if (url != null && url.contains("stuSignajax") && url.contains("latitude=") && url.contains("longitude=")) {
-                                    String[] loc = getTargetLocation();
-                                    if (loc != null && loc.length >= 2) {
-                                        String lat = loc[0].trim();
-                                        String lng = loc[1].trim();
+                                // 仅拦截签到请求
+                                if (url != null && url.contains("stuSignajax")) {
+                                    SignConfig config = getSignConfig();
+                                    String newUrlString = url;
+                                    boolean hasModified = false;
 
-                                        if ("-1".equals(lat) || "-1.0".equals(lat)) return;
-
-                                        String newUrlString = url.replaceAll("latitude=[^&]*", "latitude=" + lat)
-                                                .replaceAll("longitude=[^&]*", "longitude=" + lng);
-
-                                        try {
-                                            URL newUrl = new URL(newUrlString);
-                                            HttpURLConnection conn = (HttpURLConnection) newUrl.openConnection();
-
-                                            if (requestObj != null) {
-                                                conn.setRequestMethod((String) XposedHelpers.callMethod(requestObj, "getMethod"));
-                                                @SuppressWarnings("unchecked")
-                                                Map<String, String> headers = (Map<String, String>) XposedHelpers.callMethod(requestObj, "getRequestHeaders");
-                                                if (headers != null) {
-                                                    for (Map.Entry<String, String> entry : headers.entrySet()) {
-                                                        conn.setRequestProperty(entry.getKey(), entry.getValue());
-                                                    }
-                                                }
-                                            } else {
-                                                conn.setRequestMethod("GET");
-                                            }
-
-                                            String cookie = android.webkit.CookieManager.getInstance().getCookie(newUrlString);
-                                            if (cookie != null) conn.setRequestProperty("Cookie", cookie);
-
-                                            String contentType = conn.getContentType();
-                                            String mimeType = (contentType != null) ? contentType.split(";")[0].trim() : "application/json";
-                                            String encoding = conn.getContentEncoding() != null ? conn.getContentEncoding() : "utf-8";
-
-                                            Class<?> responseClass = XposedHelpers.findClassIfExists("android.webkit.WebResourceResponse", lpparam.classLoader);
-                                            if (responseClass != null) {
-                                                innerParam.setResult(XposedHelpers.newInstance(responseClass, mimeType, encoding, conn.getInputStream()));
-                                                XposedBridge.log("Chaoxing AdSkip: 签到位置已成功修改为 -> " + lat + "," + lng);
-                                            }
-                                        } catch (Exception e) {
-                                            XposedBridge.log("Chaoxing AdSkip Error: 代理转发失败 -> " + e.getMessage());
+                                    // 1. 修改定位 (纬度和经度)
+                                    if (config.modifyLocation && !config.latitude.isEmpty() && !config.longitude.isEmpty()) {
+                                        if (newUrlString.contains("latitude=") && newUrlString.contains("longitude=")) {
+                                            newUrlString = newUrlString.replaceAll("latitude=[^&]*", "latitude=" + config.latitude)
+                                                    .replaceAll("longitude=[^&]*", "longitude=" + config.longitude);
+                                            hasModified = true;
+                                            XposedBridge.log("Chaoxing AdSkip: 已替换定位");
                                         }
+                                    }
+
+                                    // 2. 修改地址名 (自动 URL 编码)
+                                    if (config.modifyAddress && !config.address.isEmpty()) {
+                                        if (newUrlString.contains("address=")) {
+                                            String encodedAddress = URLEncoder.encode(config.address, "UTF-8");
+                                            newUrlString = newUrlString.replaceAll("address=[^&]*", "address=" + encodedAddress);
+                                            hasModified = true;
+                                            XposedBridge.log("Chaoxing AdSkip: 已替换地址名");
+                                        }
+                                    }
+
+                                    // 3. 修改名字 (自动 URL 编码，可以直接填入注入代码)
+                                    if (config.modifyName && !config.name.isEmpty()) {
+                                        if (newUrlString.contains("name=")) {
+                                            String encodedName = URLEncoder.encode(config.name, "UTF-8");
+                                            newUrlString = newUrlString.replaceAll("name=[^&]*", "name=" + encodedName);
+                                            hasModified = true;
+                                            XposedBridge.log("Chaoxing AdSkip: 已替换名字");
+                                        }
+                                    }
+
+                                    // 如果配置都是 false，或者没有成功替换任何参数，则直接放行原请求
+                                    if (!hasModified) return;
+
+                                    // 执行拦截转发
+                                    try {
+                                        URL newUrl = new URL(newUrlString);
+                                        HttpURLConnection conn = (HttpURLConnection) newUrl.openConnection();
+
+                                        if (requestObj != null) {
+                                            conn.setRequestMethod((String) XposedHelpers.callMethod(requestObj, "getMethod"));
+                                            @SuppressWarnings("unchecked")
+                                            Map<String, String> headers = (Map<String, String>) XposedHelpers.callMethod(requestObj, "getRequestHeaders");
+                                            if (headers != null) {
+                                                for (Map.Entry<String, String> entry : headers.entrySet()) {
+                                                    conn.setRequestProperty(entry.getKey(), entry.getValue());
+                                                }
+                                            }
+                                        } else {
+                                            conn.setRequestMethod("GET");
+                                        }
+
+                                        String cookie = android.webkit.CookieManager.getInstance().getCookie(newUrlString);
+                                        if (cookie != null) conn.setRequestProperty("Cookie", cookie);
+
+                                        String contentType = conn.getContentType();
+                                        String mimeType = (contentType != null) ? contentType.split(";")[0].trim() : "application/json";
+                                        String encoding = conn.getContentEncoding() != null ? conn.getContentEncoding() : "utf-8";
+
+                                        Class<?> responseClass = XposedHelpers.findClassIfExists("android.webkit.WebResourceResponse", lpparam.classLoader);
+                                        if (responseClass != null) {
+                                            innerParam.setResult(XposedHelpers.newInstance(responseClass, mimeType, encoding, conn.getInputStream()));
+                                            XposedBridge.log("Chaoxing AdSkip: 签到请求代理转发成功！");
+                                        }
+                                    } catch (Exception e) {
+                                        XposedBridge.log("Chaoxing AdSkip Error: 代理转发失败 -> " + e.getMessage());
                                     }
                                 }
                             }
@@ -240,15 +266,74 @@ public class MainHook implements IXposedHookLoadPackage {
         }
     }
 
-    private String[] getTargetLocation() {
-        try {
-            File file = new File("/storage/emulated/0/Android/data/com.chaoxing.mobile/files/chaoxing_loc.txt");
-            if (!file.exists()) return null;
-            try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-                String line = br.readLine();
-                if (line != null && line.contains(",")) return line.split(",");
+    // 解析和自动生成配置文件的核心方法
+    private SignConfig getSignConfig() {
+        SignConfig config = new SignConfig();
+        File file = new File("/storage/emulated/0/Android/data/com.chaoxing.mobile/files/chaoxing_loc.txt");
+
+        // 如果文件不存在，自动创建并写入默认模板
+        if (!file.exists()) {
+            try {
+                file.getParentFile().mkdirs();
+                FileWriter fw = new FileWriter(file);
+                fw.write("是否开启定位修改: false\n");
+                fw.write("经度: \n");
+                fw.write("纬度: \n");
+                fw.write("是否开启地址名修改: false\n");
+                fw.write("地址名: \n");
+                fw.write("是否开启名字修改: false\n");
+                fw.write("名字: \n");
+                fw.close();
+                XposedBridge.log("Chaoxing AdSkip: 已自动创建默认配置文件");
+            } catch (Exception e) {
+                XposedBridge.log("Chaoxing AdSkip Error: 无法创建配置文件 -> " + e.getMessage());
             }
-        } catch (Exception ignored) {}
-        return null;
+            return config;
+        }
+
+        // 逐行解析配置
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (line.startsWith("是否开启定位修改:")) {
+                    config.modifyLocation = parseBooleanValue(line);
+                } else if (line.startsWith("经度:")) {
+                    config.longitude = parseStringValue(line);
+                } else if (line.startsWith("纬度:")) {
+                    config.latitude = parseStringValue(line);
+                } else if (line.startsWith("是否开启地址名修改:")) {
+                    config.modifyAddress = parseBooleanValue(line);
+                } else if (line.startsWith("地址名:")) {
+                    config.address = parseStringValue(line);
+                } else if (line.startsWith("是否开启名字修改:")) {
+                    config.modifyName = parseBooleanValue(line);
+                } else if (line.startsWith("名字:")) {
+                    config.name = parseStringValue(line);
+                }
+            }
+        } catch (Exception e) {
+            XposedBridge.log("Chaoxing AdSkip Error: 读取配置文件失败 -> " + e.getMessage());
+        }
+        return config;
+    }
+
+    // 提取冒号后的布尔值
+    private boolean parseBooleanValue(String line) {
+        try {
+            String val = line.substring(line.indexOf(":") + 1).trim();
+            return "true".equalsIgnoreCase(val);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    // 提取冒号后的字符串值
+    private String parseStringValue(String line) {
+        try {
+            return line.substring(line.indexOf(":") + 1).trim();
+        } catch (Exception e) {
+            return "";
+        }
     }
 }
