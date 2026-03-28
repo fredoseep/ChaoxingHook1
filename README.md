@@ -24,9 +24,11 @@ Open your Android file manager.
 Navigate to the app's private external directory:
 /storage/emulated/0/Android/data/com.chaoxing.mobile/files/
 
-Create a new text file named chaoxing_loc.txt.
+Once you have sent a checkin request, there should be a config file named as chaoxing_loc.txt .
 
 Open the file and enter your target coordinates in the latitude,longitude format. (English comma only!!)
+Config the specified switch.
+Name and address keys can be shown on the teachers' side . You can use front end syntax to set their appearance but with certain limitation.
 
 
 
@@ -39,7 +41,7 @@ If you want to use your real location temporarily, simply change the text file c
 Please be aware of how the server handles this specific request:
 If the sign-in initiator (e.g., your teacher) clicks into your specific sign-in details, the pinned location on the map will show your modified (fake) coordinates, but the text-based address displayed below it will still show your REAL address (derived from IP or underlying base stations).
 
-However, because the text address is usually formatted vaguely (e.g., "XXX Street, XXX Road"), as long as your real location and your spoofed location are within the same general city or district, this discrepancy goes completely unnoticed by the human eye.
+So remember to change the address string when you spoof the location
 
 
 Deep UI Cleanup: Automatically hides empty containers and specific title headers (such as the "Recommended" section) to ensure a seamless, native-looking interface.
