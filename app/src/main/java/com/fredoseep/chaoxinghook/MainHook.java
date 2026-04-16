@@ -22,6 +22,42 @@ public class MainHook implements IXposedHookLoadPackage {
 
     private static final Set<String> hookedWebViewClients = new HashSet<>();
 
+    // ==========================================================
+    // 混淆字典配置区 (宿主更新时，只需要修改这里的字符串即可)
+    // ==========================================================
+    public static class ObfuscationMap {
+        // 1. 启动页广告拦截
+        public static final String CLASS_SPLASH_VIEW_MODEL = "com.chaoxing.mobile.activity.SplashViewModel";
+        public static final String METHOD_SPLASH_A = "a";
+
+        // 2. 首页 Banner 拦截
+        public static final String CLASS_HOME_PAGE_HEADER = "com.chaoxing.mobile.study.home.mainpage.view.HomePageHeader";
+        public static final String METHOD_HOME_HEADER_G = "g";
+
+        // 3. 隐藏首页推荐栏
+        public static final String CLASS_CATEGORY_HOLDER = "com.chaoxing.mobile.study.home.mainpage2.adapter.viewholder.MainRecordCategoryHolder";
+        public static final String METHOD_CATEGORY_HOLDER_O = "o";
+        public static final String FIELD_CATEGORY_HOLDER_TV_LEFT = "c"; // 推荐栏标题 TextView 的字段名
+
+        // 4. 清空第一页帖子
+        public static final String CLASS_MAIN_PAGE_RECORD_ADAPTER = "com.chaoxing.mobile.study.home.mainpage2.adapter.MainPageRecordAdapter";
+        public static final String METHOD_ADAPTER_GET_ITEM_COUNT = "getItemCount";
+        public static final String FIELD_ADAPTER_LIST_A = "a";         // 列表数据的字段名 1
+        public static final String FIELD_ADAPTER_LIST_F82688A = "f82688a"; // 列表数据的字段名 2 (备用)
+
+        // 5. 最近使用记录数量提升
+        public static final String CLASS_DB_QUERY = "lo.b0";
+        public static final String METHOD_DB_QUERY_W = "W";
+
+        // 6. 掐断特定对话类型
+        public static final String CLASS_CHAT_MANAGER_Q1 = "com.chaoxing.mobile.chat.manager.q1";
+        public static final String METHOD_CHAT_MANAGER_C1 = "c1";
+
+        // 9. 消息防撤回 (环信 SDK)
+        public static final String CLASS_EM_CMD_MESSAGE_BODY = "com.hyphenate.chat.EMCmdMessageBody";
+        public static final String METHOD_EM_CMD_ACTION = "action";
+    }
+
     // 定义一个内部类来存储配置信息
     private static class SignConfig {
         boolean modifyLocation = false;
@@ -41,21 +77,21 @@ public class MainHook implements IXposedHookLoadPackage {
 
         // ==================== 1. 启动页广告拦截 ====================
         try {
-            Class<?> splashViewModelClass = XposedHelpers.findClass("com.chaoxing.mobile.activity.SplashViewModel", lpparam.classLoader);
-            XposedBridge.hookAllMethods(splashViewModelClass, "a", new XC_MethodHook() {
+            Class<?> splashViewModelClass = XposedHelpers.findClass(ObfuscationMap.CLASS_SPLASH_VIEW_MODEL, lpparam.classLoader);
+            XposedBridge.hookAllMethods(splashViewModelClass, ObfuscationMap.METHOD_SPLASH_A, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                     param.setResult(null);
                 }
             });
         } catch (Throwable t) {
-            XposedBridge.log("Chaoxing AdSkip Error: " + t.getMessage());
+            XposedBridge.log("Chaoxing AdSkip Error (Splash): " + t.getMessage());
         }
 
         // ==================== 2. 首页 Banner 拦截 ====================
         try {
-            Class<?> homePageHeaderClass = XposedHelpers.findClass("com.chaoxing.mobile.study.home.mainpage.view.HomePageHeader", lpparam.classLoader);
-            XposedBridge.hookAllMethods(homePageHeaderClass, "g", new XC_MethodHook() {
+            Class<?> homePageHeaderClass = XposedHelpers.findClass(ObfuscationMap.CLASS_HOME_PAGE_HEADER, lpparam.classLoader);
+            XposedBridge.hookAllMethods(homePageHeaderClass, ObfuscationMap.METHOD_HOME_HEADER_G, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                     if (param.args.length > 0) param.args[0] = null;
@@ -67,17 +103,17 @@ public class MainHook implements IXposedHookLoadPackage {
 
         // ==================== 3. 隐藏首页推荐栏 ====================
         try {
-            Class<?> categoryHolderClass = XposedHelpers.findClass("com.chaoxing.mobile.study.home.mainpage2.adapter.viewholder.MainRecordCategoryHolder", lpparam.classLoader);
-            XposedBridge.hookAllMethods(categoryHolderClass, "o", new XC_MethodHook() {
+            Class<?> categoryHolderClass = XposedHelpers.findClass(ObfuscationMap.CLASS_CATEGORY_HOLDER, lpparam.classLoader);
+            XposedBridge.hookAllMethods(categoryHolderClass, ObfuscationMap.METHOD_CATEGORY_HOLDER_O, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                     Object viewHolder = param.thisObject;
-                    android.widget.TextView tvLeft = (android.widget.TextView) XposedHelpers.getObjectField(viewHolder, "c");
+                    android.widget.TextView tvLeft = (android.widget.TextView) XposedHelpers.getObjectField(viewHolder, ObfuscationMap.FIELD_CATEGORY_HOLDER_TV_LEFT);
 
                     if (tvLeft != null && tvLeft.getText() != null) {
                         String title = tvLeft.getText().toString();
                         if (title.contains("推荐") || title.contains("Recommend")) {
-                            android.view.View itemView = (android.view.View) XposedHelpers.getObjectField(viewHolder, "itemView");
+                            android.view.View itemView = (android.view.View) XposedHelpers.getObjectField(viewHolder, "itemView"); // itemView是RecyclerView.ViewHolder自带的，无需混淆
                             if (itemView != null) {
                                 itemView.setVisibility(android.view.View.GONE);
                                 android.view.ViewGroup.LayoutParams layoutParams = itemView.getLayoutParams();
@@ -95,15 +131,15 @@ public class MainHook implements IXposedHookLoadPackage {
 
         // ==================== 4. 清空第一页帖子 ====================
         try {
-            Class<?> adapterClass = XposedHelpers.findClass("com.chaoxing.mobile.study.home.mainpage2.adapter.MainPageRecordAdapter", lpparam.classLoader);
-            XposedBridge.hookAllMethods(adapterClass, "getItemCount", new XC_MethodHook() {
+            Class<?> adapterClass = XposedHelpers.findClass(ObfuscationMap.CLASS_MAIN_PAGE_RECORD_ADAPTER, lpparam.classLoader);
+            XposedBridge.hookAllMethods(adapterClass, ObfuscationMap.METHOD_ADAPTER_GET_ITEM_COUNT, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                     try {
-                        java.util.List<?> listA = (java.util.List<?>) XposedHelpers.getObjectField(param.thisObject, "a");
+                        java.util.List<?> listA = (java.util.List<?>) XposedHelpers.getObjectField(param.thisObject, ObfuscationMap.FIELD_ADAPTER_LIST_A);
                         if (listA != null) param.setResult(listA.size());
                     } catch (NoSuchFieldError e) {
-                        java.util.List<?> listA = (java.util.List<?>) XposedHelpers.getObjectField(param.thisObject, "f82688a");
+                        java.util.List<?> listA = (java.util.List<?>) XposedHelpers.getObjectField(param.thisObject, ObfuscationMap.FIELD_ADAPTER_LIST_F82688A);
                         if (listA != null) param.setResult(listA.size());
                     }
                 }
@@ -114,8 +150,8 @@ public class MainHook implements IXposedHookLoadPackage {
 
         // ==================== 5. 最近使用记录数量提升 ====================
         try {
-            Class<?> dbQueryClass = XposedHelpers.findClass("lo.b0", lpparam.classLoader);
-            XposedBridge.hookAllMethods(dbQueryClass, "W", new XC_MethodHook() {
+            Class<?> dbQueryClass = XposedHelpers.findClass(ObfuscationMap.CLASS_DB_QUERY, lpparam.classLoader);
+            XposedBridge.hookAllMethods(dbQueryClass, ObfuscationMap.METHOD_DB_QUERY_W, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                     if (param.args.length == 3 && param.args[2] instanceof Integer) {
@@ -129,8 +165,8 @@ public class MainHook implements IXposedHookLoadPackage {
 
         // ==================== 6. 掐断特定对话类型 ====================
         try {
-            Class<?> q1Class = XposedHelpers.findClass("com.chaoxing.mobile.chat.manager.q1", lpparam.classLoader);
-            XposedBridge.hookAllMethods(q1Class, "c1", new XC_MethodHook() {
+            Class<?> q1Class = XposedHelpers.findClass(ObfuscationMap.CLASS_CHAT_MANAGER_Q1, lpparam.classLoader);
+            XposedBridge.hookAllMethods(q1Class, ObfuscationMap.METHOD_CHAT_MANAGER_C1, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                     Object result = param.getResult();
@@ -151,8 +187,27 @@ public class MainHook implements IXposedHookLoadPackage {
             XposedBridge.log("Chaoxing AdSkip Error (q1.c1): " + t.getMessage());
         }
 
-        // ==================== 7. WebView 签到定位拦截 (自定义参数版) ====================
+        // ==================== [新增] 9. 消息防撤回核心拦截网 ====================
         try {
+            Class<?> cmdMsgBodyClass = XposedHelpers.findClass(ObfuscationMap.CLASS_EM_CMD_MESSAGE_BODY, lpparam.classLoader);
+            XposedBridge.hookAllMethods(cmdMsgBodyClass, ObfuscationMap.METHOD_EM_CMD_ACTION, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                    Object result = param.getResult();
+                    if (result != null && "REVOKE_FLAG".equals(result.toString())) {
+                        // 篡改返回结果，使客户端无法识别撤回指令
+                        param.setResult("BLOCK_REVOKE_FLAG");
+                        XposedBridge.log("Chaoxing AdSkip: 【防撤回触发】成功拦截并篡改了一条撤回指令！消息已保住。");
+                    }
+                }
+            });
+        } catch (Throwable t) {
+            XposedBridge.log("Chaoxing AdSkip Error (Anti-Revoke): " + t.getMessage());
+        }
+
+        // ==================== 7 & 8. WebView 核心请求拦截 (考试日志 + 签到定位) ====================
+        try {
+            // 注意：android.webkit 包属于安卓系统层，不受 App 混淆影响，无需提取配置
             Class<?> webViewClass = XposedHelpers.findClass("android.webkit.WebView", lpparam.classLoader);
 
             XposedBridge.hookAllMethods(webViewClass, "setWebViewClient", new XC_MethodHook() {
@@ -182,13 +237,36 @@ public class MainHook implements IXposedHookLoadPackage {
                                     }
                                 }
 
-                                // 仅拦截签到请求
-                                if (url != null && url.contains("stuSignajax")) {
+                                if (url == null) return;
+
+                                // ==================== 8. 考试风控拦截网 (监控日志 + 切屏计数) ====================
+                                if (url.startsWith("https://mooc1-api.chaoxing.com/keeper/api/receiveExamLogs") ||
+                                        url.contains("/exam-ans/exam/phone/exit-count")) {
+
+                                    XposedBridge.log("Chaoxing AdSkip: 成功触发考试风控拦截网！拦截到目标 -> " + url);
+                                    try {
+                                        Class<?> responseClass = XposedHelpers.findClassIfExists("android.webkit.WebResourceResponse", lpparam.classLoader);
+                                        if (responseClass != null) {
+                                            // 伪造一个通用的成功 JSON 响应体，骗过前端，防止网页报错
+                                            String fakeResponse = "{\"status\":1,\"result\":true,\"msg\":\"success\",\"data\":null}";
+                                            java.io.InputStream fakeStream = new java.io.ByteArrayInputStream(fakeResponse.getBytes("UTF-8"));
+
+                                            // 核心截杀：直接塞回伪造的流，真实的请求将被彻底掐断在本地
+                                            innerParam.setResult(XposedHelpers.newInstance(responseClass, "application/json", "utf-8", fakeStream));
+                                            XposedBridge.log("Chaoxing AdSkip: 考试风控请求已扔进黑洞，并返回了伪造 Success！");
+                                        }
+                                    } catch (Exception e) {
+                                        XposedBridge.log("Chaoxing AdSkip Error: 拦截考试风控异常 -> " + e.getMessage());
+                                    }
+                                    return;
+                                }
+
+                                // ==================== 7. 仅拦截签到请求 ====================
+                                if (url.contains("stuSignajax")) {
                                     SignConfig config = getSignConfig();
                                     String newUrlString = url;
                                     boolean hasModified = false;
 
-                                    // 1. 修改定位 (纬度和经度)
                                     if (config.modifyLocation && !config.latitude.isEmpty() && !config.longitude.isEmpty()) {
                                         if (newUrlString.contains("latitude=") && newUrlString.contains("longitude=")) {
                                             newUrlString = newUrlString.replaceAll("latitude=[^&]*", "latitude=" + config.latitude)
@@ -198,7 +276,6 @@ public class MainHook implements IXposedHookLoadPackage {
                                         }
                                     }
 
-                                    // 2. 修改地址名 (自动 URL 编码)
                                     if (config.modifyAddress && !config.address.isEmpty()) {
                                         if (newUrlString.contains("address=")) {
                                             String encodedAddress = URLEncoder.encode(config.address, "UTF-8");
@@ -208,7 +285,6 @@ public class MainHook implements IXposedHookLoadPackage {
                                         }
                                     }
 
-                                    // 3. 修改名字 (自动 URL 编码，可以直接填入注入代码)
                                     if (config.modifyName && !config.name.isEmpty()) {
                                         if (newUrlString.contains("name=")) {
                                             String encodedName = URLEncoder.encode(config.name, "UTF-8");
@@ -218,10 +294,8 @@ public class MainHook implements IXposedHookLoadPackage {
                                         }
                                     }
 
-                                    // 如果配置都是 false，或者没有成功替换任何参数，则直接放行原请求
                                     if (!hasModified) return;
 
-                                    // 执行拦截转发
                                     try {
                                         URL newUrl = new URL(newUrlString);
                                         HttpURLConnection conn = (HttpURLConnection) newUrl.openConnection();
@@ -266,12 +340,10 @@ public class MainHook implements IXposedHookLoadPackage {
         }
     }
 
-    // 解析和自动生成配置文件的核心方法
     private SignConfig getSignConfig() {
         SignConfig config = new SignConfig();
         File file = new File("/storage/emulated/0/Android/data/com.chaoxing.mobile/files/chaoxing_loc.txt");
 
-        // 如果文件不存在，自动创建并写入默认模板
         if (!file.exists()) {
             try {
                 file.getParentFile().mkdirs();
@@ -291,7 +363,6 @@ public class MainHook implements IXposedHookLoadPackage {
             return config;
         }
 
-        // 逐行解析配置
         try (BufferedReader br = new BufferedReader(new FileReader(file))) {
             String line;
             while ((line = br.readLine()) != null) {
@@ -318,7 +389,6 @@ public class MainHook implements IXposedHookLoadPackage {
         return config;
     }
 
-    // 提取冒号后的布尔值
     private boolean parseBooleanValue(String line) {
         try {
             String val = line.substring(line.indexOf(":") + 1).trim();
@@ -328,7 +398,6 @@ public class MainHook implements IXposedHookLoadPackage {
         }
     }
 
-    // 提取冒号后的字符串值
     private String parseStringValue(String line) {
         try {
             return line.substring(line.indexOf(":") + 1).trim();
