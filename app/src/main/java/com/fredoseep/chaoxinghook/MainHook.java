@@ -72,6 +72,10 @@ public class MainHook implements IXposedHookLoadPackage {
         String name = "";
         boolean randomizeDeviceFlag = false;
         boolean autoCalculateLocation = false;
+        boolean bypassExamCheat = true;
+        boolean enableCopyRestriction = true;
+        boolean replaceExamScreenshot = false;
+        String fakeImagePath = "";
     }
 
     private static SignConfig cachedConfig = null;
@@ -120,9 +124,9 @@ public class MainHook implements IXposedHookLoadPackage {
                                 if (url == null) return;
 
                                 // ==========================================
-                                // 【恢复核心】：考试风控拦截 (防切屏、防退出)
+                                // 【可配置】：考试风控拦截 (防切屏、防退出)
                                 // ==========================================
-                                if (url.startsWith("https://mooc1-api.chaoxing.com/keeper/api/receiveExamLogs") || url.contains("/exam-ans/exam/phone/exit-count")||url.contains("https://data-xxt.aichoxing.com/analysis/ac_event")) {
+                                if (getSignConfig().bypassExamCheat && (url.startsWith("https://mooc1-api.chaoxing.com/keeper/api/receiveExamLogs") || url.contains("/exam-ans/exam/phone/exit-count")||url.contains("https://data-xxt.aichoxing.com/analysis/ac_event"))) {
                                     try {
                                         Class<?> responseClass = XposedHelpers.findClassIfExists("android.webkit.WebResourceResponse", lpparam.classLoader);
                                         if (responseClass != null) {
@@ -138,11 +142,10 @@ public class MainHook implements IXposedHookLoadPackage {
                                     }
                                     return;
                                 }
-                                if (url.contains("notAllowCopy.css")) {
+                                if (getSignConfig().enableCopyRestriction && url.contains("notAllowCopy.css")) {
                                     try {
                                         Class<?> responseClass = XposedHelpers.findClassIfExists("android.webkit.WebResourceResponse", lpparam.classLoader);
                                         if (responseClass != null) {
-                                            // 直接返回一个空的 CSS 文件内容，废掉它的 user-select 限制
                                             String emptyCss = "";
                                             innerParam.setResult(XposedHelpers.newInstance(
                                                     responseClass,
@@ -167,7 +170,13 @@ public class MainHook implements IXposedHookLoadPackage {
                                             sendLat = calculatedTarget[0];
                                             sendLon = calculatedTarget[1];
                                         } else {
-                                            double baseLat = 39.90923, baseLon = 116.397428;
+                                            double baseLat = 0, baseLon = 0;
+                                            try {
+                                                Matcher latMatcher = Pattern.compile("latitude=([^&]+)").matcher(url);
+                                                Matcher lonMatcher = Pattern.compile("longitude=([^&]+)").matcher(url);
+                                                if (latMatcher.find()) baseLat = Double.parseDouble(latMatcher.group(1));
+                                                if (lonMatcher.find()) baseLon = Double.parseDouble(lonMatcher.group(1));
+                                            } catch (Exception e) {}
                                             try {
                                                 if (!config.latitude.isEmpty()) baseLat = Double.parseDouble(config.latitude);
                                                 if (!config.longitude.isEmpty()) baseLon = Double.parseDouble(config.longitude);
@@ -331,6 +340,9 @@ public class MainHook implements IXposedHookLoadPackage {
             XC_MethodHook fileReadHook = new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    SignConfig config = getSignConfig();
+                    if (!config.replaceExamScreenshot) return;
+
                     if (param.args.length == 0 || param.args[0] == null) return;
 
                     String path = "";
@@ -341,27 +353,25 @@ public class MainHook implements IXposedHookLoadPackage {
                     }
                     if (path.isEmpty()) return;
 
-                    // 【精准狙击】：只拦截学习通这个特定的截图缓存目录下的图片读取！
                     if (path.contains("/Android/data/com.chaoxing.mobile/cache/image/") &&
                             (path.endsWith(".png") || path.endsWith(".jpg"))) {
 
-                        File fakeFile = new File(FAKE_UPLOAD_FILE_PATH);
+                        String imagePath = config.fakeImagePath.isEmpty() ? FAKE_UPLOAD_FILE_PATH : config.fakeImagePath;
+                        File fakeFile = new File(imagePath);
                         if (fakeFile.exists()) {
-                            // 实施掉包手术！
                             if (param.args[0] instanceof java.io.File) {
                                 param.args[0] = fakeFile;
                             } else {
-                                param.args[0] = FAKE_UPLOAD_FILE_PATH;
+                                param.args[0] = imagePath;
                             }
                             XposedBridge.log("Chaoxing [绝杀]: 抓到监考截图上传！已成功替换为自定义图片 -> 拦截原图: " + path);
                         } else {
-                            XposedBridge.log("Chaoxing [警告]: 找不到自定义伪装图片，未执行替换！请检查路径: " + FAKE_UPLOAD_FILE_PATH);
+                            XposedBridge.log("Chaoxing [警告]: 找不到自定义伪装图片，未执行替换！请检查路径: " + imagePath);
                         }
                     }
                 }
             };
 
-            // 监听所有打开文件流的动作
             XposedBridge.hookAllConstructors(java.io.FileInputStream.class, fileReadHook);
 
         } catch (Throwable t) {
@@ -437,7 +447,7 @@ public class MainHook implements IXposedHookLoadPackage {
             try {
                 file.getParentFile().mkdirs();
                 FileWriter fw = new FileWriter(file);
-                fw.write("是否开启定位修改: false\n经度: \n纬度: \n是否开启地址名修改: false\n地址名: \n是否开启名字修改: false\n名字: \n是否开启随机指纹: true\n是否开启经纬度爆破: false\n");
+                fw.write("是否开启定位修改: false\n经度: \n纬度: \n是否开启地址名修改: false\n地址名: \n是否开启名字修改: false\n名字: \n是否开启随机指纹: true\n是否开启经纬度爆破: false\n是否开启考试风控拦截: true\n是否开启复制限制解除: true\n是否开启考试截图替换: false\n截图替换路径: " + FAKE_UPLOAD_FILE_PATH + "\n");
                 fw.close();
             } catch (Exception e) {}
             cachedConfig = config;
@@ -458,6 +468,10 @@ public class MainHook implements IXposedHookLoadPackage {
                 else if (line.startsWith("名字:")) config.name = parseStringValue(line);
                 else if (line.startsWith("是否开启随机指纹:")) config.randomizeDeviceFlag = parseBooleanValue(line);
                 else if (line.startsWith("是否开启经纬度爆破:")) config.autoCalculateLocation = parseBooleanValue(line);
+                else if (line.startsWith("是否开启考试风控拦截:")) config.bypassExamCheat = parseBooleanValue(line);
+                else if (line.startsWith("是否开启复制限制解除:")) config.enableCopyRestriction = parseBooleanValue(line);
+                else if (line.startsWith("是否开启考试截图替换:")) config.replaceExamScreenshot = parseBooleanValue(line);
+                else if (line.startsWith("截图替换路径:")) config.fakeImagePath = parseStringValue(line);
             }
         } catch (Exception e) {}
 

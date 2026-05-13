@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Frosted Glass Dark Palette -->
+    <color name="fg_primary">#FF7C6FF7</color>
+    <color name="fg_primary_dark">#FF5D4EDC</color>
+    <color name="fg_accent">#FFB5AEFE</color>
+    <color name="fg_background">#FF110F1E</color>
+    <color name="fg_card">#F0181630</color>
+    <color name="fg_card_row">#E0151328</color>
+    <color name="fg_card_stroke">#20FFFFFF</color>
+    <color name="fg_text_primary">#FFEBE8F5</color>
+    <color name="fg_text_secondary">#FFA59FBA</color>
+    <color name="fg_text_hint">#FF6E6880</color>
+    <color name="fg_divider">#FF28243D</color>
+    <color name="fg_switch_on">#FFA29BFE</color>
+    <color name="fg_switch_off">#FF9B97AA</color>
+    <color name="fg_switch_thumb_off">#FF6E6880</color>
+    <color name="fg_switch_track_alpha">#CCA29BFE</color>
+    <color name="fg_gradient_start">#FF7C6FF7</color>
+    <color name="fg_gradient_end">#FFB5AEFE</color>
+
+    <color name="mi_primary">@color/fg_primary</color>
+    <color name="mi_primary_dark">@color/fg_primary_dark</color>
+    <color name="mi_accent">@color/fg_accent</color>
+    <color name="mi_background">@color/fg_background</color>
+    <color name="mi_card">@color/fg_card</color>
+    <color name="mi_card_hover">@color/fg_divider</color>
+    <color name="mi_card_row">@color/fg_card_row</color>
+    <color name="mi_text_primary">@color/fg_text_primary</color>
+    <color name="mi_text_secondary">@color/fg_text_secondary</color>
+    <color name="mi_text_hint">@color/fg_text_hint</color>
+    <color name="mi_divider">@color/fg_divider</color>
+    <color name="mi_switch_on">@color/fg_switch_on</color>
+    <color name="mi_switch_off">@color/fg_switch_off</color>
+    <color name="mi_switch_thumb_off">@color/fg_switch_thumb_off</color>
+    <color name="mi_switch_track_alpha">@color/fg_switch_track_alpha</color>
+</resources>

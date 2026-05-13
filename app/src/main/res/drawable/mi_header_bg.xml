@@ -2,37 +2,29 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape>
-            <solid android:color="#10000000" />
-            <corners 
-                android:bottomLeftRadius="16dp" 
-                android:bottomRightRadius="16dp" />
+            <solid android:color="#12000000" />
+            <corners android:bottomLeftRadius="20dp" android:bottomRightRadius="20dp" />
         </shape>
     </item>
-    <item android:bottom="2dp" android:right="2dp">
+    <item android:bottom="2dp" android:left="1dp" android:right="1dp">
         <shape>
-            <solid android:color="#08000000" />
-            <corners 
-                android:bottomLeftRadius="16dp" 
-                android:bottomRightRadius="16dp" />
+            <solid android:color="#08FFFFFF" />
+            <corners android:bottomLeftRadius="20dp" android:bottomRightRadius="20dp" />
         </shape>
     </item>
-    <item android:bottom="4dp" android:right="4dp">
-        <shape>
-            <solid android:color="#04000000" />
-            <corners 
-                android:bottomLeftRadius="16dp" 
-                android:bottomRightRadius="16dp" />
-        </shape>
-    </item>
-    <item android:top="1dp" android:left="1dp" android:bottom="4dp" android:right="4dp">
+    <item>
         <shape>
             <gradient
-                android:startColor="@color/mi_primary"
-                android:endColor="#FFCC5200"
-                android:angle="90" />
-            <corners 
-                android:bottomLeftRadius="16dp" 
-                android:bottomRightRadius="16dp" />
+                android:startColor="@color/fg_gradient_start"
+                android:endColor="@color/fg_gradient_end"
+                android:angle="135" />
+            <corners android:bottomLeftRadius="20dp" android:bottomRightRadius="20dp" />
+        </shape>
+    </item>
+    <item android:bottom="1dp">
+        <shape>
+            <solid android:color="#10FFFFFF" />
+            <corners android:bottomLeftRadius="20dp" android:bottomRightRadius="20dp" />
         </shape>
     </item>
 </layer-list>

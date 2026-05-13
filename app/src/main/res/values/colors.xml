@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Frosted Glass Modern Palette -->
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#FF6200EE</color>
     <color name="purple_700">#FF3700B3</color>
@@ -9,17 +10,38 @@
     <color name="white">#FFFFFFFF</color>
     <color name="gray">#FF9E9E9E</color>
     <color name="light_gray">#FFE0E0E0</color>
-    
-    <color name="mi_primary">#FFFF6700</color>
-    <color name="mi_primary_dark">#FFCC5200</color>
-    <color name="mi_accent">#FF00C853</color>
-    <color name="mi_background">#FFF8F8F8</color>
-    <color name="mi_card">#FFFFFFFF</color>
-    <color name="mi_card_hover">#FFF5F5F5</color>
-    <color name="mi_text_primary">#FF1A1A1A</color>
-    <color name="mi_text_secondary">#FF666666</color>
-    <color name="mi_text_hint">#FFAAAAAA</color>
-    <color name="mi_divider">#FFEEEEEE</color>
-    <color name="mi_switch_on">#FFFF6700</color>
-    <color name="mi_switch_off">#FFDDDDDD</color>
+
+    <color name="fg_primary">#FF6C5CE7</color>
+    <color name="fg_primary_dark">#FF5A4BD1</color>
+    <color name="fg_accent">#FFA29BFE</color>
+    <color name="fg_background">#FFF2F1F9</color>
+    <color name="fg_card">#F4FFFFFF</color>
+    <color name="fg_card_row">#FFF8F7FC</color>
+    <color name="fg_card_stroke">#20FFFFFF</color>
+    <color name="fg_text_primary">#FF2D2640</color>
+    <color name="fg_text_secondary">#FF7C7590</color>
+    <color name="fg_text_hint">#FFB0A8C0</color>
+    <color name="fg_divider">#FFE8E5F0</color>
+    <color name="fg_switch_on">#FF6C5CE7</color>
+    <color name="fg_switch_off">#FFD5D0E3</color>
+    <color name="fg_switch_thumb_off">#FFE8E8E8</color>
+    <color name="fg_switch_track_alpha">#CC6C5CE7</color>
+    <color name="fg_gradient_start">#FF6C5CE7</color>
+    <color name="fg_gradient_end">#FFA29BFE</color>
+
+    <color name="mi_primary">@color/fg_primary</color>
+    <color name="mi_primary_dark">@color/fg_primary_dark</color>
+    <color name="mi_accent">@color/fg_accent</color>
+    <color name="mi_background">@color/fg_background</color>
+    <color name="mi_card">@color/fg_card</color>
+    <color name="mi_card_hover">@color/fg_divider</color>
+    <color name="mi_card_row">@color/fg_card_row</color>
+    <color name="mi_text_primary">@color/fg_text_primary</color>
+    <color name="mi_text_secondary">@color/fg_text_secondary</color>
+    <color name="mi_text_hint">@color/fg_text_hint</color>
+    <color name="mi_divider">@color/fg_divider</color>
+    <color name="mi_switch_on">@color/fg_switch_on</color>
+    <color name="mi_switch_off">@color/fg_switch_off</color>
+    <color name="mi_switch_thumb_off">@color/fg_switch_thumb_off</color>
+    <color name="mi_switch_track_alpha">@color/fg_switch_track_alpha</color>
 </resources>

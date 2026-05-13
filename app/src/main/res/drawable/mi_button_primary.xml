@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <gradient
-        android:startColor="@color/mi_primary"
-        android:endColor="#FFCC5200"
-        android:angle="90" />
-    <corners android:radius="12dp" />
-</shape>
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#40FFFFFF">
+    <item>
+        <shape>
+            <gradient
+                android:startColor="@color/fg_gradient_start"
+                android:endColor="@color/fg_gradient_end"
+                android:angle="135" />
+            <corners android:radius="14dp" />
+        </shape>
+    </item>
+</ripple>

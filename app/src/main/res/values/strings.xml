@@ -2,6 +2,15 @@
     <string name="app_name">ChaoxingHook</string>
     
     <string name="section_location">定位设置</string>
+
+    <string name="section_location_manual">手动定位修改</string>
+    <string name="desc_location_manual">直接使用指定坐标替换签到位置</string>
+    <string name="section_location_blast">经纬度爆破</string>
+    <string name="desc_location_blast">三点采样 + 三角定位算法，自动反推目标坐标。初始经纬度留空则自动从请求中获取真实定位。</string>
+    <string name="base_latitude">初始纬度</string>
+    <string name="base_longitude">初始经度</string>
+    <string name="hint_latitude_blast">留空自动获取，也可手动指定</string>
+    <string name="hint_longitude_blast">留空自动获取，也可手动指定</string>
     <string name="section_address">地址设置</string>
     <string name="section_name">姓名设置</string>
     <string name="section_advanced">高级设置</string>
@@ -18,7 +27,17 @@
     <string name="name">姓名</string>
     
     <string name="enable_random_device_flag">开启随机指纹</string>
-    
+
+    <string name="section_exam">考试设置</string>
+    <string name="enable_exam_cheat_bypass">开启考试风控拦截</string>
+    <string name="enable_copy_restriction">开启复制限制解除</string>
+    <string name="enable_exam_screenshot_replace">开启考试截图替换</string>
+    <string name="screenshot_image_path">截图替换路径</string>
+    <string name="hint_screenshot_path">伪装图片的完整路径</string>
+    <string name="desc_exam_cheat_bypass">拦截切屏/退出检测上报，返回成功响应</string>
+    <string name="desc_copy_restriction">替换限制复制的CSS，解锁文本选择</string>
+    <string name="desc_exam_screenshot">将监考截图替换为自定义伪装图片</string>
+
     <string name="save">保存</string>
     <string name="reset">重置</string>
     
