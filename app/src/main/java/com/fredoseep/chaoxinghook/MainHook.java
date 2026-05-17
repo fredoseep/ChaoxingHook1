@@ -126,7 +126,7 @@ public class MainHook implements IXposedHookLoadPackage {
                                 // ==========================================
                                 // 【可配置】：考试风控拦截 (防切屏、防退出)
                                 // ==========================================
-                                if (getSignConfig().bypassExamCheat && (url.startsWith("https://mooc1-api.chaoxing.com/keeper/api/receiveExamLogs") || url.contains("/exam-ans/exam/phone/exit-count")||url.contains("https://data-xxt.aichoxing.com/analysis/ac_event")||url.contains("https://pan-yz.chaoxing.com/upload?uploadtype=examkeeper"))) {
+                                if (getSignConfig().bypassExamCheat && (url.startsWith("https://mooc1-api.chaoxing.com/keeper/api/receiveExamLogs") || url.contains("/exam-ans/exam/phone/exit-count")||url.contains("https://data-xxt.aichoxing.com/analysis/ac_event")||url.contains("pan-yz.chaoxing.com/upload"))) {
                                     try {
                                         Class<?> responseClass = XposedHelpers.findClassIfExists("android.webkit.WebResourceResponse", lpparam.classLoader);
                                         if (responseClass != null) {
@@ -376,6 +376,40 @@ public class MainHook implements IXposedHookLoadPackage {
 
         } catch (Throwable t) {
             XposedBridge.log("Chaoxing Error (File Replace Hook): " + t.getMessage());
+        }
+        // ==========================================
+        // 【核弹级斩首】：直接拦截 JS 协议层，彻底切断截图上传并伪造成功回调
+        // ==========================================
+        try {
+            // 精准狙击你找到的这个 f1 类的 q0 方法
+            XposedHelpers.findAndHookMethod(
+                    "com.chaoxing.mobile.webapp.jsprotocal.common.f1", // 注意：如果你更新了版本，这个 f1 类名如果变了，需要跟着改
+                    lpparam.classLoader,
+                    "q0",
+                    File.class,
+                    new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                            XposedBridge.log("Chaoxing [终极斩杀]: 成功拦截 f1.q0，ExamKeeper 截图上传已被物理蒸发！");
+
+                            Object f1Instance = param.thisObject;
+
+                            // 1. 反射调用 f1 类的 f0 方法。
+                            // 源码里是：f0(int status, CloudDiskFile1 cloudDiskFile)
+                            // 传入 status = 1 (代表成功)，文件对象传 null，生成一段虚假的成功 JSON
+                            String fakeSuccessJson = (String) XposedHelpers.callMethod(f1Instance, "f0", 1, null);
+
+                            // 2. 反射调用父类的 r 方法，把假 JSON 传回给网页前端
+                            // 第一个参数是协议名 B ("CLIENT_SNAPSHOT")，第二个是生成的 JSON
+                            XposedHelpers.callMethod(f1Instance, "r", "CLIENT_SNAPSHOT", fakeSuccessJson);
+
+                            // 3. 截断方法：设置 setResult(null) 后，原方法 q0 里的上传代码将彻底不被执行！
+                            param.setResult(null);
+                        }
+                    }
+            );
+        } catch (Throwable t) {
+            XposedBridge.log("Chaoxing Error (f1.q0 Hook): " + t.getMessage());
         }
     }
 
