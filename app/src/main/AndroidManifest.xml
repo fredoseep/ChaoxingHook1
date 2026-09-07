@@ -5,6 +5,16 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- 触发系统"获取应用列表"权限弹窗（工信部 TTAF 108-2022 / ColorOS 等国产 ROM）：
+         QUERY_ALL_PACKAGES 为 normal 权限安装即授；GET_INSTALLED_APPS 为 dangerous
+         运行时权限，SettingsActivity 启动时 requestPermissions 弹窗申请 -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <uses-permission android:name="com.android.permission.GET_INSTALLED_APPS" />
+
+    <!-- 检测 Magisk 是否安装（Root 申请失败时给出精确提示） -->
+    <queries>
+        <package android:name="com.topjohnwu.magisk" />
+    </queries>
 
     <application
         android:allowBackup="true"

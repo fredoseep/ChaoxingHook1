@@ -2,6 +2,9 @@ package com.fredoseep.chaoxinghook
 
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -71,6 +74,84 @@ fun SettingsScreen() {
     fun launchMapPicker() {
         val intent = Intent(context, MapPickerActivity::class.java)
         mapPickerLauncher.launch(intent)
+    }
+
+    // ==================== Root / 应用列表权限 ====================
+    // 工信部规范权限（ColorOS/MIUI 等国产 ROM 定义），未授权时申请 Root 前需先弹窗申请
+    val APP_LIST_PERMISSION = "com.android.permission.GET_INSTALLED_APPS"
+
+    /** Magisk 是否安装（Manifest queries 已声明其包名保证可见性；Magisk 隐藏包名时检测不到，走兜底提示） */
+    fun isMagiskInstalled(): Boolean = try {
+        context.packageManager.getPackageInfo("com.topjohnwu.magisk", 0)
+        true
+    } catch (_: Exception) {
+        false
+    }
+
+    fun requestRoot() {
+        // su 请求会阻塞等待用户在 Magisk 弹窗中确认，必须放后台线程
+        Thread {
+            val output = try {
+                val p = Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
+                val out = p.inputStream.bufferedReader().readText()
+                p.waitFor()
+                out
+            } catch (_: Exception) {
+                ""
+            }
+            Handler(Looper.getMainLooper()).post {
+                when {
+                    // su -c id 成功且确为 uid=0(root) 才算授权
+                    output.contains("uid=0") ->
+                        Toast.makeText(context, "已获得 Root 授权", Toast.LENGTH_SHORT).show()
+                    // Magisk 在但被拒：多半是之前勾过"记住拒绝"，或超级用户列表里策略为拒绝
+                    isMagiskInstalled() ->
+                        Toast.makeText(
+                            context,
+                            "Root 申请未通过：请打开 Magisk → 超级用户，允许本应用（若勾选过\"记住拒绝\"需先删除该记录）",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    else ->
+                        Toast.makeText(context, "未检测到 Magisk，无法申请 Root", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }.start()
+    }
+
+    val appListPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { _ ->
+        // ColorOS 16 等 ROM 的授权结果可能不反映在标准回调中，以实际权限状态为准
+        val nowGranted = try {
+            context.checkSelfPermission(APP_LIST_PERMISSION) == PackageManager.PERMISSION_GRANTED
+        } catch (_: Exception) {
+            false
+        }
+        if (nowGranted) {
+            // 应用列表权限到手，继续申请 Root
+            requestRoot()
+        } else {
+            Toast.makeText(
+                context,
+                "未获得应用列表权限，请到系统设置 → 应用 → ChaoxingHook → 权限 中手动开启",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    /** 应用列表权限已授权（或 ROM 不管控）→ 直接申请 Root；否则先弹应用列表权限申请 */
+    fun requestRootOrAppList() {
+        val defined = try {
+            context.packageManager.getPermissionInfo(APP_LIST_PERMISSION, 0); true
+        } catch (_: Exception) { false }
+        val hasAppList = try {
+            context.checkSelfPermission(APP_LIST_PERMISSION) == PackageManager.PERMISSION_GRANTED
+        } catch (_: Exception) { false }
+        if (defined && !hasAppList) {
+            appListPermissionLauncher.launch(APP_LIST_PERMISSION)
+        } else {
+            requestRoot()
+        }
     }
 
     MiuixTheme(controller = controller) {
@@ -203,6 +284,11 @@ fun SettingsScreen() {
                 // ============ 其他 ============
                 item {
                     Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+                        ArrowPreference(
+                            title = "申请 Root 权限",
+                            summary = "弹出 Magisk 授权确认（未授权应用列表时先申请）",
+                            onClick = { requestRootOrAppList() },
+                        )
                         ArrowPreference(
                             title = "重置所有配置",
                             summary = "恢复默认值并立即保存",
