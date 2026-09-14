@@ -49,7 +49,6 @@ public class MainHook implements IXposedHookLoadPackage {
 
     private static final Set<String> hookedWebViewClients = new HashSet<>();
     private static final String FAKE_UPLOAD_FILE_PATH = "/storage/emulated/0/Download/fake_exam_image.png";
-    // 长按直达模块主页：已注入长按监听的行视图（弱引用防泄漏）
     private static final java.util.WeakHashMap<android.view.View, Boolean> injectedLongPressRows = new java.util.WeakHashMap<>();
 
     // 核心修复：添加防重入标志，防止读取配置文件时触发无限递归死循环
@@ -246,6 +245,7 @@ public class MainHook implements IXposedHookLoadPackage {
             debugLog("installLongPressModuleEntry FAILED: " + t);
         }
         debugLog("=== handleLoadPackage done");
+        ClipboardPopKiller.hook(lpparam);
     }
 
     /** 核心 hook 区：全部走 DexKit 结构匹配 + 硬编码名回退 */
