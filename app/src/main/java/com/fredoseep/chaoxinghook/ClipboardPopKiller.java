@@ -12,7 +12,11 @@ public class ClipboardPopKiller {
     private static final String TAG = "clipboardPopKiller";
 
     public static void hook(XC_LoadPackage.LoadPackageParam lpparam){
+        hook(lpparam.classLoader);
+    }
+
+    public static void hook(ClassLoader loader) {
         Log.d(TAG,"injected");
-        XposedHelpers.findAndHookMethod("com.chaoxing.mobile.main.clipboard.ClipboardChangeMonitor", lpparam.classLoader, "m", "android.app.Activity", XC_MethodReplacement.DO_NOTHING);
+        XposedHelpers.findAndHookMethod("com.chaoxing.mobile.main.clipboard.ClipboardChangeMonitor", loader, "m", "android.app.Activity", XC_MethodReplacement.DO_NOTHING);
     }
 }

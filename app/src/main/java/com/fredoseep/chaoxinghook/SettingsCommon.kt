@@ -3,7 +3,6 @@ package com.fredoseep.chaoxinghook
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
@@ -25,7 +24,7 @@ import androidx.compose.ui.platform.LocalContext
  */
 
 /**
- * 设置页数据源。所有变更都立刻落盘（读写 `chaoxing_loc.txt` 都经 `su`，见 [ConfigManager]）。
+ * 设置页数据源。所有变更都立刻落盘（通过本进程文件 API 读写，见 [ConfigManager]）。
  *
  * 用 [MutableState] 持有配置：hook 配置是 data class，修改必须走 `copy()` ——
  * `mutableStateOf` 按引用比较，原地 apply 不会触发重组。
@@ -45,7 +44,7 @@ class HookSettingsState internal constructor(
             Handler(Looper.getMainLooper()).post {
                 Toast.makeText(
                     context,
-                    "无法读取配置（需要 Root 权限），当前显示默认值。获得 Root 前不会覆盖已保存的配置。",
+                    "无法读取本地配置，当前显示默认值。读取成功前不会覆盖已保存的配置。",
                     Toast.LENGTH_LONG,
                 ).show()
             }
@@ -61,35 +60,26 @@ class HookSettingsState internal constructor(
             context,
             when {
                 ok -> "配置已保存"
-                ConfigManager.loadFailed -> "未读取到配置，已跳过保存以免覆盖（请先申请 Root）"
-                else -> "保存失败，可能需要 Root"
+                ConfigManager.loadFailed -> "未读取到配置，已跳过保存以免覆盖"
+                else -> "保存失败，请检查存储空间"
             },
             Toast.LENGTH_SHORT,
         ).show()
     }
 
     fun reset() {
-        configState.value = ConfigManager.HookConfig()
-        // 重置是确认框里显式点过的破坏性操作，ConfigManager.reset() 不受 loadFailed 保护
         val ok = ConfigManager.reset()
+        if (ok) configState.value = ConfigManager.HookConfig()
         Toast.makeText(
             context,
-            if (ok) "配置已重置" else "重置失败，可能需要 Root",
+            if (ok) "配置已重置" else "重置失败，请检查存储空间",
             Toast.LENGTH_SHORT,
         ).show()
     }
 
-    /**
-     * 重新从磁盘读取（用于刚拿到 Root 授权之后）。
-     *
-     * 只在「上次没读到」时才重载：那种情况下内存里是默认值、磁盘才是真相，
-     * 且 [ConfigManager.loadFailed] 会把保存一直挡住，不重载就会卡在"开关点了没反应"。
-     * 反之内存与磁盘一致，重载反而可能顶掉刚敲进去、还没落盘的文本。
-     */
+    /** 文件工具关闭后重读，反映导入或重置结果。 */
     fun reload() {
-        if (ConfigManager.loadFailed) {
-            configState.value = ConfigManager.load()
-        }
+        configState.value = ConfigManager.load()
     }
 }
 
@@ -103,18 +93,21 @@ class HookSettingsState internal constructor(
 @Composable
 fun rememberHookSettingsState(): HookSettingsState {
     val context = LocalContext.current
-    return remember { HookSettingsState(context, ConfigManager.load()) }
+    return remember {
+        ConfigManager.initialize(context)
+        HookSettingsState(context, ConfigManager.load())
+    }
 }
 
 /**
- * 设置页的公共依赖：应用列表权限 + Root 申请 + 地图选点回填。
+ * 设置页的公共依赖：本地文件工具 + 地图选点回填。
  *
- * 权限申请走 Activity Result API，必须挂在 `@Composable` 上，
+ * 地图回填走 Activity Result API，必须挂在 `@Composable` 上，
  * 所以三套风格各调用一次本函数即可，逻辑仍然只有一份。
  */
 class SettingsScaffold internal constructor(
-    /** 申请 Root：未授予应用列表权限时先弹系统权限弹窗 */
-    val requestRoot: () -> Unit,
+    /** 打开无需 Root 的原生配置与文件工具 */
+    val openFileTools: () -> Unit,
     /** 打开高德地图选点；返回后自动回填经纬度 */
     val launchMapPicker: () -> Unit,
 )
@@ -127,97 +120,6 @@ class SettingsScaffold internal constructor(
 @Composable
 fun rememberSettingsScaffold(settings: HookSettingsState): SettingsScaffold {
     val context = LocalContext.current
-
-    // ==================== Root / 应用列表权限 ====================
-    // 工信部规范权限（ColorOS/MIUI 等国产 ROM 定义），未授权时申请 Root 前需先弹窗申请
-    val appListPermission = "com.android.permission.GET_INSTALLED_APPS"
-
-    /**
-     * Magisk 是否安装（Manifest 的 queries 已声明其包名保证可见性；
-     * Magisk 隐藏包名时检测不到，走「未检测到 Magisk」兜底提示）
-     */
-    fun isMagiskInstalled(): Boolean = try {
-        context.packageManager.getPackageInfo("com.topjohnwu.magisk", 0)
-        true
-    } catch (_: Exception) {
-        false
-    }
-
-    fun requestRoot() {
-        // su 请求会阻塞等待用户在 Magisk 弹窗中确认，必须放后台线程
-        Thread {
-            val output = try {
-                val p = Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
-                val out = p.inputStream.bufferedReader().readText()
-                // 同样要排空 stderr，否则管道写满会让 su 卡在 waitFor()
-                p.errorStream.bufferedReader().readText()
-                p.waitFor()
-                out
-            } catch (_: Exception) {
-                ""
-            }
-            Handler(Looper.getMainLooper()).post {
-                when {
-                    // su -c id 成功且确为 uid=0(root) 才算授权
-                    output.contains("uid=0") -> {
-                        Toast.makeText(context, "已获得 Root 授权", Toast.LENGTH_SHORT).show()
-                        // 启动时因没 Root 而没读到的配置，现在补读一次；
-                        // 否则 loadFailed 会一直挡住保存，表现为"开关点了没反应"
-                        settings.reload()
-                    }
-                    // Magisk 在但被拒：多半是之前勾过"记住拒绝"，或超级用户列表里策略为拒绝
-                    isMagiskInstalled() ->
-                        Toast.makeText(
-                            context,
-                            "Root 申请未通过：请打开 Magisk → 超级用户，允许本应用（若勾选过\"记住拒绝\"需先删除该记录）",
-                            Toast.LENGTH_LONG,
-                        ).show()
-                    else ->
-                        Toast.makeText(context, "未检测到 Magisk，无法申请 Root", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }.start()
-    }
-
-    val appListPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { _ ->
-        // ColorOS 16 等 ROM 的授权结果可能不反映在标准回调中，以实际权限状态为准
-        val nowGranted = try {
-            context.checkSelfPermission(appListPermission) == PackageManager.PERMISSION_GRANTED
-        } catch (_: Exception) {
-            false
-        }
-        if (nowGranted) {
-            // 应用列表权限到手，继续申请 Root
-            requestRoot()
-        } else {
-            Toast.makeText(
-                context,
-                "未获得应用列表权限，请到系统设置 → 应用 → ChaoxingHook → 权限 中手动开启",
-                Toast.LENGTH_LONG,
-            ).show()
-        }
-    }
-
-    /** 应用列表权限已授权（或 ROM 不管控）→ 直接申请 Root；否则先弹应用列表权限申请 */
-    fun requestRootOrAppList() {
-        val defined = try {
-            context.packageManager.getPermissionInfo(appListPermission, 0); true
-        } catch (_: Exception) {
-            false
-        }
-        val hasAppList = try {
-            context.checkSelfPermission(appListPermission) == PackageManager.PERMISSION_GRANTED
-        } catch (_: Exception) {
-            false
-        }
-        if (defined && !hasAppList) {
-            appListPermissionLauncher.launch(appListPermission)
-        } else {
-            requestRoot()
-        }
-    }
 
     // ==================== 地图选点 ====================
     val mapPickerLauncher = rememberLauncherForActivityResult(
@@ -239,12 +141,12 @@ fun rememberSettingsScaffold(settings: HookSettingsState): SettingsScaffold {
 
     // 局部函数每次重组都是新实例，用 rememberUpdatedState 兜住最新引用，
     // 这样返回出去的 SettingsScaffold 能稳定 remember（不需要把函数当 remember key）
-    val currentRequestRoot by rememberUpdatedState { requestRootOrAppList() }
+    val currentFileTools by rememberUpdatedState { EmbeddedSettings.show(context, Runnable { settings.reload() }) }
     val currentLaunchMapPicker by rememberUpdatedState { launchMapPicker() }
 
     return remember {
         SettingsScaffold(
-            requestRoot = { currentRequestRoot() },
+            openFileTools = { currentFileTools() },
             launchMapPicker = { currentLaunchMapPicker() },
         )
     }

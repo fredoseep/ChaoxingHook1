@@ -1,5 +1,7 @@
 package com.fredoseep.chaoxinghook;
 
+import android.app.AndroidAppHelper;
+
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -40,12 +42,16 @@ public class MainHook implements IXposedHookLoadPackage {
     private static final String DEBUG_LOG_FILE = "/data/user/0/com.chaoxing.mobile/files/chaoxinghook_debug.log";
 
     private static void debugLog(String msg) {
+        try { android.util.Log.i("ChaoxingHookDiag", msg); } catch (Throwable ignored) {}
         try {
             java.io.FileWriter fw = new java.io.FileWriter(DEBUG_LOG_FILE, true);
             fw.write(msg + "\n");
             fw.close();
         } catch (Throwable ignored) {}
     }
+
+    private static final java.util.concurrent.atomic.AtomicBoolean applicationHooksStarted =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
 
     private static final Set<String> hookedWebViewClients = new HashSet<>();
     private static final String FAKE_UPLOAD_FILE_PATH = "/storage/emulated/0/Download/fake_exam_image.png";
@@ -61,18 +67,18 @@ public class MainHook implements IXposedHookLoadPackage {
 
     /** 按 类名(可空)+方法签名 查找类（默认限 com.chaoxing.mobile 包）；返回 null 表示未找到（调用方自行回退） */
     private static Class<?> findClassByMethods(DexKitBridge bridge, ClassLoader loader,
-            String tag, String className, String returnType, String... paramTypes) {
+                                               String tag, String className, String returnType, String... paramTypes) {
         return findClassByMethodsImpl(bridge, loader, tag, className, false, returnType, paramTypes);
     }
 
     /** 全包搜索版：顶级混淆包（如 y6e）不在 com.chaoxing.mobile 下，必须放开包名限制 */
     private static Class<?> findClassByMethodsEverywhere(DexKitBridge bridge, ClassLoader loader,
-            String tag, String className, String returnType, String... paramTypes) {
+                                                         String tag, String className, String returnType, String... paramTypes) {
         return findClassByMethodsImpl(bridge, loader, tag, className, true, returnType, paramTypes);
     }
 
     private static Class<?> findClassByMethodsImpl(DexKitBridge bridge, ClassLoader loader,
-            String tag, String className, boolean searchEverywhere, String returnType, String... paramTypes) {
+                                                   String tag, String className, boolean searchEverywhere, String returnType, String... paramTypes) {
         try {
             MethodMatcher mm = MethodMatcher.create();
             if (returnType != null) mm = mm.returnType(returnType);
@@ -213,12 +219,10 @@ public class MainHook implements IXposedHookLoadPackage {
             debugLog("installProcessExitHook FAILED: " + t);
         }
 
-        // DexKit：加固场景（梆梆 SecNeo）必须用 ClassLoader 方式创建，useMemoryDexFile=true
-        try (DexKitBridge bridge = DexKitBridge.create(lpparam.classLoader, true)) {
-            debugLog("DexKitBridge.create OK");
-            installCoreHooks(bridge, lpparam);
+        try {
+            installApplicationReadyHook();
         } catch (Throwable t) {
-            debugLog("DexKitBridge.create FAILED: " + t);
+            debugLog("Application.attach observer FAILED: " + t);
         }
         try {
             installWebViewHooks(lpparam);
@@ -238,14 +242,56 @@ public class MainHook implements IXposedHookLoadPackage {
         } catch (Throwable t) {
             debugLog("installExamSnapshotHook FAILED: " + t);
         }
+        debugLog("=== handleLoadPackage done; business hooks deferred");
+    }
+
+    /** Register before attach; if attach already finished, initialize from its real Context. */
+    private void installApplicationReadyHook() {
+        XposedHelpers.findAndHookMethod(android.app.Application.class, "attach",
+                android.content.Context.class, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        if (param.hasThrowable()) return;
+                        if (param.args.length > 0 && param.args[0] instanceof android.content.Context) {
+                            initializeApplicationHooks((android.content.Context) param.args[0]);
+                        }
+                    }
+                });
+        debugLog("Application.attach observer registered");
+        android.app.Application current = AndroidAppHelper.currentApplication();
+        if (current != null && current.getBaseContext() != null) {
+            initializeApplicationHooks(current.getBaseContext());
+        }
+    }
+
+    private void initializeApplicationHooks(android.content.Context context) {
+        if (!"com.chaoxing.mobile".equals(context.getPackageName())) return;
+        ClassLoader loader = context.getClassLoader();
+        if (loader == null) {
+            debugLog("Application.attach ready: ClassLoader unavailable");
+            return;
+        }
+        if (!applicationHooksStarted.compareAndSet(false, true)) return;
+        debugLog("[INIT-FIX-1] Application.attach ready: context=" + context.getClass().getName()
+                + " loader=" + loader);
+        try (DexKitBridge bridge = DexKitBridge.create(loader, true)) {
+            debugLog("DexKitBridge.create OK (application loader)");
+            installCoreHooks(bridge, loader);
+            debugLog("installCoreHooks completed; inspect individual Hook logs");
+        } catch (Throwable t) {
+            debugLog("application DexKit/core initialization FAILED: " + t);
+        }
         try {
-            installLongPressModuleEntry(lpparam);
-            debugLog("installLongPressModuleEntry OK");
+            installLongPressModuleEntry(loader);
+            debugLog("installLongPressModuleEntry OK (application loader)");
         } catch (Throwable t) {
             debugLog("installLongPressModuleEntry FAILED: " + t);
         }
-        debugLog("=== handleLoadPackage done");
-        ClipboardPopKiller.hook(lpparam);
+        try {
+            ClipboardPopKiller.hook(loader);
+        } catch (Throwable t) {
+            debugLog("ClipboardPopKiller FAILED: " + t);
+        }
     }
 
     /** 核心 hook 区：全部走 DexKit 结构匹配 + 硬编码名回退 */
@@ -274,21 +320,20 @@ public class MainHook implements IXposedHookLoadPackage {
         XposedHelpers.findAndHookMethod(Runtime.class, "exit", int.class, exitHook);
     }
 
-    private void installCoreHooks(DexKitBridge bridge, LoadPackageParam lpparam) {
-        ClassLoader loader = lpparam.classLoader;
+    private void installCoreHooks(DexKitBridge bridge, ClassLoader loader) {
 
         // 1. SplashViewModel.a(Activity) -> Ad：拦截开屏广告数据（返回 null 使广告不展示）
-        {
+        try {
             Class<?> clazz = findClassByMethods(bridge, loader, "splash",
                     ObfuscationMap.CLASS_SPLASH_VIEW_MODEL, null, "android.app.Activity");
             Method m = findMethodBySignature(clazz, null, "android.app.Activity");
             hookMethodSafe(m, new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam param) { param.setResult(null); }
             }, "splash.a");
-        }
+        } catch (Throwable t) { debugLog("core-group-1 FAILED: " + t); }
 
         // 2. HomePageHeader.g(List) -> V：清空首页头部广告数据
-        {
+        try {
             Class<?> clazz = findClassByMethods(bridge, loader, "home-header",
                     ObfuscationMap.CLASS_HOME_PAGE_HEADER, "void", "java.util.List");
             Method m = findMethodBySignature(clazz, "void", "java.util.List");
@@ -297,10 +342,10 @@ public class MainHook implements IXposedHookLoadPackage {
                     if (param.args.length > 0) param.args[0] = null;
                 }
             }, "home-header.g");
-        }
+        } catch (Throwable t) { debugLog("core-group-2 FAILED: " + t); }
 
         // 3. MainRecordCategoryHolder.o(ResourceLog) -> V：隐藏"推荐"分类卡片
-        {
+        try {
             Class<?> clazz = findClassByMethods(bridge, loader, "category-holder",
                     ObfuscationMap.CLASS_CATEGORY_HOLDER, "void", "com.chaoxing.mobile.resource.ui.ResourceLog");
             Method m = findMethodBySignature(clazz, "void", "com.chaoxing.mobile.resource.ui.ResourceLog");
@@ -325,10 +370,10 @@ public class MainHook implements IXposedHookLoadPackage {
                     } catch (Throwable ignored) {}
                 }
             }, "category-holder.o");
-        }
+        } catch (Throwable t) { debugLog("core-group-3 FAILED: " + t); }
 
         // 4. MainPageRecordAdapter.getItemCount()：主页记录列表只显示真正的记录（去掉推荐位）
-        {
+        try {
             Class<?> clazz = findClassByMethods(bridge, loader, "record-adapter",
                     ObfuscationMap.CLASS_MAIN_PAGE_RECORD_ADAPTER, "int", (String[]) new String[0]);
             Method m = findMethodBySignature(clazz, "int", new String[0]);
@@ -341,11 +386,11 @@ public class MainHook implements IXposedHookLoadPackage {
                     } catch (Throwable ignored) {}
                 }
             }, "record-adapter.getItemCount");
-        }
+        } catch (Throwable t) { debugLog("core-group-4 FAILED: " + t); }
 
         // 5. y6e.W/I(Context, int, int) -> LiveData：数据库查询分页大小 3 -> 15
         //    注意：该类在顶级混淆包（7.0.1=y6e，6.7.8=zo.b0），必须用全包搜索的结构匹配
-        {
+        try {
             Class<?> clazz = findClassByMethodsEverywhere(bridge, loader, "db-query",
                     null, "androidx.lifecycle.LiveData", "android.content.Context", "int", "int");
             if (clazz == null) {
@@ -371,12 +416,12 @@ public class MainHook implements IXposedHookLoadPackage {
                     }
                 }, "db-query." + m.getName());
             }
-        }
+        } catch (Throwable t) { debugLog("core-group-5 FAILED: " + t); }
 
         // 6. 聊天列表过滤：移除 type==20 的官方推送会话
         //    7.0.1：chat.manager.b 的 N2(List,boolean)->void 与 r0(List,boolean)->int
         //    （6.7.8 为 q1.c1()，已消失）；两方法首参均为主界面会话列表，前置过滤即可
-        {
+        try {
             Class<?> clazz = findClassByMethods(bridge, loader, "chat-filter",
                     ObfuscationMap.CLASS_CHAT_MANAGER, "void", "java.util.List", "boolean");
             if (clazz == null) {
@@ -413,7 +458,7 @@ public class MainHook implements IXposedHookLoadPackage {
             } else {
                 debugLog("Hook[chat-filter]: manager 类未找到");
             }
-        }
+        } catch (Throwable t) { debugLog("core-group-6 FAILED: " + t); }
 
         // 7. EMCmdMessageBody.action()：环信 SDK 库类（第三方库不混淆，保持硬编码）
         try {
@@ -988,10 +1033,10 @@ public class MainHook implements IXposedHookLoadPackage {
      *      可点击行同样注入（不要求 TextView 自身可点击——CardView 结构下 TextView 均不可点击）。
      * 原单击行为不变；行视图弱引用表去重。
      */
-    private void installLongPressModuleEntry(LoadPackageParam lpparam) {
+    private void installLongPressModuleEntry(ClassLoader loader) {
         // A. 精准注入：MineFragment2.onViewCreated（viewBinding 静态布局，挂载一次即生效）
         try {
-            Class<?> frag = XposedHelpers.findClassIfExists("com.chaoxing.study.mine.MineFragment2", lpparam.classLoader);
+            Class<?> frag = XposedHelpers.findClassIfExists("com.chaoxing.study.mine.MineFragment2", loader);
             if (frag != null) {
                 XposedBridge.hookAllMethods(frag, "onViewCreated", new XC_MethodHook() {
                     @Override
@@ -1038,10 +1083,7 @@ public class MainHook implements IXposedHookLoadPackage {
         debugLog("longpress-entry: 已注入设置行长按 (row=" + row.getClass().getName() + ")");
         row.setOnLongClickListener(v -> {
             try {
-                android.content.Intent intent = new android.content.Intent("android.intent.action.MAIN");
-                intent.setClassName("com.fredoseep.chaoxinghook", "com.fredoseep.chaoxinghook.SettingsActivity");
-                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
-                v.getContext().startActivity(intent);
+                EmbeddedSettings.show(v.getContext());
                 return true;
             } catch (Throwable t) {
                 return false;
@@ -1152,9 +1194,9 @@ public class MainHook implements IXposedHookLoadPackage {
         READING_CONFIG.set(true);
         try {
             SignConfig config = new SignConfig();
-            File file = new File("/storage/emulated/0/Android/data/com.chaoxing.mobile/files/chaoxing_loc.txt");
+            File file = ConfigStorage.file(AndroidAppHelper.currentApplication());
 
-            if (!file.exists()) {
+            if (!file.exists() && !new File(file.getPath() + ".bak").exists()) {
                 try {
                     file.getParentFile().mkdirs();
                     FileWriter fw = new FileWriter(file);
@@ -1166,7 +1208,8 @@ public class MainHook implements IXposedHookLoadPackage {
                 return config;
             }
 
-            try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            try (BufferedReader br = new BufferedReader(new java.io.InputStreamReader(
+                    new android.util.AtomicFile(file).openRead(), java.nio.charset.StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = br.readLine()) != null) {
                     line = line.trim();
@@ -1189,6 +1232,9 @@ public class MainHook implements IXposedHookLoadPackage {
             cachedConfig = config;
             lastReadTime = System.currentTimeMillis();
             return config;
+        } catch (Exception e) {
+            debugLog("config-read FAILED: " + e);
+            return cachedConfig != null ? cachedConfig : new SignConfig();
         } finally {
             READING_CONFIG.set(false);
         }

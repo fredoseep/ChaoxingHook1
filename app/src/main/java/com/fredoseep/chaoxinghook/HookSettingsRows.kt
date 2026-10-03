@@ -25,7 +25,7 @@ sealed interface HookSettingRow {
     ) : HookSettingRow
 
     /**
-     * 一行动作（点击立即执行，例如重置 / 申请 Root / 打开地图）
+     * 一行动作（点击立即执行，例如重置 / 打开文件工具 / 打开地图）
      *
      * @param confirm 非空时表示这是破坏性动作，渲染层应先弹确认框再执行。
      *   三套风格各用各的对话框（Nuke 用 `NukeSimpleDialog`，MIUIX / M3 各自实现），
@@ -61,7 +61,7 @@ data class HookSettingGroup(
  * 顺序与原来的实现一致：签到 → 信息修改 → 风控与考试 → 其他。
  * 「界面风格」分组由各风格自己拼（它需要风格切换回调，不属于 hook 业务）。
  *
- * @param scaffold 申请 Root 与地图选点要走 Activity Result，只能由 `@Composable` 提供
+ * @param scaffold 打开文件工具 与地图选点要走 Activity Result，只能由 `@Composable` 提供
  */
 fun HookSettingsState.buildHookSettingGroups(scaffold: SettingsScaffold): List<HookSettingGroup> {
     val cfg = config
@@ -218,9 +218,9 @@ fun HookSettingsState.buildHookSettingGroups(scaffold: SettingsScaffold): List<H
             title = "其他",
             rows = listOf(
                 HookSettingRow.Action(
-                    title = "申请 Root 权限",
-                    summary = "弹出 Magisk 授权确认（未授权应用列表时先申请）",
-                    onClick = { scaffold.requestRoot() },
+                    title = "本地配置与文件工具",
+                    summary = "无需 Root；支持配置导入、导出与图片选择",
+                    onClick = { scaffold.openFileTools() },
                 ),
                 HookSettingRow.Action(
                     title = "重置所有配置",
