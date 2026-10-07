@@ -19,10 +19,12 @@ public final class EmbeddedSettings {
     private static final String[] KEYS = {
         "是否开启定位修改", "经度", "纬度", "是否开启地址名修改", "地址名",
         "是否开启名字修改", "名字", "是否开启随机指纹", "是否开启经纬度爆破",
+        "是否开启手势自动签到", "是否开启签到码自动签到",
         "是否开启考试风控拦截", "是否开启复制限制解除", "是否开启考试截图替换", "截图替换路径"
     };
     private static final String[] DEFAULTS = {
-        "false", "", "", "false", "", "false", "", "true", "false", "true", "true", "false",
+        "false", "", "", "false", "", "false", "", "true", "false", "false", "false",
+        "true", "true", "false",
         "/storage/emulated/0/Download/fake_exam_image.png"
     };
     private static final int REQUEST = 0x6C58;

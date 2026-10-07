@@ -192,6 +192,8 @@ public class MainHook implements IXposedHookLoadPackage {
         String name = "";
         boolean randomizeDeviceFlag = false;
         boolean autoCalculateLocation = false;
+        boolean autoGestureSign = false;
+        boolean autoCodeSign = false;
         boolean bypassExamCheat = true;
         boolean enableCopyRestriction = true;
         boolean replaceExamScreenshot = false;
@@ -906,6 +908,13 @@ public class MainHook implements IXposedHookLoadPackage {
                                     if (cfg.enableCopyRestriction) {
                                         wv.evaluateJavascript(buildCopyEnablerJs(), null);
                                     }
+                                    // 手势/签到码自动签到：进页取校验码，驱动页面自身提交流
+                                    if (cfg.autoGestureSign || cfg.autoCodeSign) {
+                                        String cfgLat = cfg.modifyLocation ? cfg.latitude.replaceAll("[^0-9.\\-]", "") : "";
+                                        String cfgLon = cfg.modifyLocation ? cfg.longitude.replaceAll("[^0-9.\\-]", "") : "";
+                                        wv.evaluateJavascript(buildAutoCodeSignJs(cfg.autoGestureSign, cfg.autoCodeSign, cfgLat, cfgLon),
+                                                r -> debugLog("autosign inject: " + r));
+                                    }
                                 } catch (Throwable ignored) {}
                             }
                         });
@@ -1367,6 +1376,127 @@ public class MainHook implements IXposedHookLoadPackage {
                 + "}catch(e){}})();";
     }
 
+    /**
+     * 手势/签到码自动签到注入。
+     * 页面加载完成后向同源 /newsign/gesture?activeId=&type=0 请求该活动的校验码（该分支以登录态直接返回明文），
+     * 手势页回填 #code（若存在）并触发 hasPasswd；签到码页逐格填写并同步隐藏主输入框 #mobileInput，
+     * 之后复用页面自身的校验与提交流（deviceCode/name 等提交参数由页面逻辑携带，坐标由 POST 桥改写）。
+     * 目标节点可能异步渲染或在同源 iframe 中，boot 轮询最多 ~6s。
+     * 位置解锁：开启位置校验的页面会等 CLIENT_USER_LOCATION 回调才提交，
+     * 填码后主动取活动靶心并模拟原生 jsBridge.trigger 推送；靶心不可见时退回配置坐标。
+     */
+    private static String buildAutoCodeSignJs(boolean gestureOn, boolean codeOn, String cfgLat, String cfgLon) {
+        return "(function(){\n"
+                + " 'use strict';\n"
+                + " if(window.__cxAutoCodeV1)return 'already';\n"
+                + " window.__cxAutoCodeV1=true;\n"
+                + " var GESTURE_ON=" + gestureOn + ",CODE_ON=" + codeOn + ";\n"
+                + " var CFG_LAT='" + cfgLat + "',CFG_LON='" + cfgLon + "';\n"
+                + " function aidOf(search){try{var q=new URLSearchParams(search);return q.get('activeId')||q.get('activePrimaryId')||'';}catch(e){return '';}}\n"
+                + " function docs(){var a=[document];try{var f=document.querySelectorAll('iframe');for(var i=0;i<f.length;i++){var d=f[i].contentDocument;if(d)a.push(d);}}catch(e){}return a;}\n"
+                + " var tries=0;\n"
+                // 位置解锁：ifopenAddress=1 的页面要等原生定位回调才继续，模拟 jsBridge 推送
+                + " function unlock(d2,aid2){\n"
+                + "  try{\n"
+                + "   var ioa=d2.getElementById('ifopenAddress');\n"
+                + "   if(!ioa||String(ioa.value||'')!=='1')return;\n"
+                + "   var x2=new XMLHttpRequest();\n"
+                + "   x2.onreadystatechange=function(){\n"
+                + "    if(x2.readyState!==4)return;\n"
+                + "    var lat='',lon='',txt='';\n"
+                + "    try{var j=JSON.parse(x2.responseText);var dd=(j&&j.data)?j.data:j;if(dd){lat=String(dd.locationLatitude||'');lon=String(dd.locationLongitude||'');txt=String(dd.locationText||'');}}catch(e){}\n"
+                + "    if(!lat||!lon){\n"
+                + "     if(CFG_LAT&&CFG_LON){lat=CFG_LAT;lon=CFG_LON;txt='';}\n"
+                + "     else return;\n"
+                + "    }\n"
+                + "    var loc={result:1,address:txt,longitude:parseFloat(lon),latitude:parseFloat(lat)};\n"
+                + "    setTimeout(function(){\n"
+                + "     try{if(window.jsBridge&&typeof window.jsBridge.trigger==='function')window.jsBridge.trigger('CLIENT_USER_LOCATION',loc);}catch(e){}\n"
+                + "    },1200);\n"
+                + "   };\n"
+                + "   x2.open('GET','/v2/apis/active/getPPTActiveInfo?activeId='+encodeURIComponent(aid2),true);\n"
+                + "   x2.send();\n"
+                + "  }catch(e){}\n"
+                + " }\n"
+                + " function boot(){\n"
+                + "  var ds=docs();\n"
+                + "  for(var i=0;i<ds.length;i++){\n"
+                + "   var d=ds[i];\n"
+                + "   var isG=!!d.getElementById('gesturepwd');\n"
+                + "   var isC=d.querySelectorAll('input[codeIndex]').length>=4;\n"
+                + "   if(!isG&&!isC)continue;\n"
+                + "   var mode=isG?'gesture':'code';\n"
+                + "   if(mode==='gesture'&&!GESTURE_ON)return 'gesture-off';\n"
+                + "   if(mode==='code'&&!CODE_ON)return 'code-off';\n"
+                + "   var oi=d.getElementById('otherId');\n"
+                + "   if(oi&&String(oi.value||'')==='0')return 'skip';\n"
+                + "   var aid=aidOf(location.search);\n"
+                + "   try{var f2=document.querySelectorAll('iframe');for(var k=0;!aid&&k<f2.length;k++)aid=aidOf(f2[k].contentWindow.location.search);}catch(e){}\n"
+                + "   var ai=d.getElementById('activeId');\n"
+                + "   if(!aid&&ai)aid=ai.value;\n"
+                + "   if(!aid)return 'no-aid';\n"
+                + "   var x=new XMLHttpRequest();\n"
+                + "   x.onreadystatechange=function(){\n"
+                + "    if(x.readyState!==4||x.status!==200)return;\n"
+                + "    var rd=new DOMParser().parseFromString(x.responseText,'text/html');\n"
+                + "    var el=rd.getElementById('code');\n"
+                + "    var code=el?String(el.getAttribute('value')||el.value||''):'';\n"
+                + "    if(!/^\\d{4,}$/.test(code))return;\n"
+                + "    if(mode==='gesture'){\n"
+                + "     var hidden=d.getElementById('code');\n"
+                + "     var jq=window.jQuery;\n"
+                + "     if(!jq||!jq.fn){try{var f3=document.querySelectorAll('iframe');for(var z=0;z<f3.length;z++){var w=f3[z].contentWindow;if(w.jQuery&&w.jQuery.fn){jq=w.jQuery;break;}}}catch(e){}}\n"
+                + "     if(!jq||!jq.fn)return;\n"
+                // 部分 gesture 模板没有 #code 隐藏域，hasPasswd 处理器自行比对/上报
+                + "     if(hidden)hidden.value=code;\n"
+                + "     jq('#gesturepwd',d).trigger('hasPasswd',[code]);\n"
+                + "     unlock(d,aid);\n"
+                + "    }else{\n"
+                + "     if(code.length!==4)return;\n"
+                + "     var by={},ins=d.querySelectorAll('input[codeIndex]');\n"
+                + "     for(var n=0;n<ins.length;n++)by[ins[n].getAttribute('codeIndex')]=ins[n];\n"
+                // 逐格填写。页面的 keydown 处理器会先清空格子，因此绝不能派发 keydown，只走 input/change；
+                // 填完再同步隐藏主输入框 #mobileInput（移动端真实输入通道）
+                + "     var i2=0;\n"
+                + "     function fillNext(){\n"
+                + "      if(i2>=4){\n"
+                + "       try{\n"
+                + "        var mi=d.getElementById('mobileInput');\n"
+                + "        if(mi){\n"
+                + "         try{Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set.call(mi,code);}catch(e){mi.value=code;}\n"
+                + "         mi.dispatchEvent(new Event('input',{bubbles:true}));\n"
+                + "         mi.dispatchEvent(new Event('change',{bubbles:true}));\n"
+                + "         try{if(window.jQuery&&window.jQuery.fn)window.jQuery(mi).trigger('input').trigger('propertychange');}catch(e){}\n"
+                + "        }\n"
+                + "       }catch(e){}\n"
+                + "       unlock(d,aid);\n"
+                + "       return;\n"
+                + "      }\n"
+                + "      var inp=by[String(i2+1)];\n"
+                + "      if(!inp)return;\n"
+                + "      var ch=code.charAt(i2);\n"
+                + "      try{inp.focus();}catch(e){}\n"
+                + "      try{Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set.call(inp,ch);}catch(e){inp.value=ch;}\n"
+                + "      try{inp.dispatchEvent(new Event('input',{bubbles:true}));}catch(e){}\n"
+                + "      try{inp.dispatchEvent(new Event('change',{bubbles:true}));}catch(e){}\n"
+                + "      try{if(window.jQuery&&window.jQuery.fn)window.jQuery(inp).trigger('input');}catch(e){}\n"
+                + "      i2++;\n"
+                + "      setTimeout(fillNext,250);\n"
+                + "     }\n"
+                + "     fillNext();\n"
+                + "    }\n"
+                + "   };\n"
+                + "   x.open('GET','/newsign/gesture?activeId='+encodeURIComponent(aid)+'&type=0',true);\n"
+                + "   x.send();\n"
+                + "   return 'armed';\n"
+                + "  }\n"
+                + "  if(++tries<10){setTimeout(boot,600);return 'pending';}\n"
+                + "  return 'not-found';\n"
+                + " }\n"
+                + " return boot();\n"
+                + "})();\n";
+    }
+
     private double[] calculateTriangulation(List<LocationPoint> points) {
         if (points.size() < 3) return null;
 
@@ -1437,7 +1567,7 @@ public class MainHook implements IXposedHookLoadPackage {
                 try {
                     file.getParentFile().mkdirs();
                     FileWriter fw = new FileWriter(file);
-                    fw.write("是否开启定位修改: false\n经度: \n纬度: \n是否开启地址名修改: false\n地址名: \n是否开启名字修改: false\n名字: \n是否开启随机指纹: true\n是否开启经纬度爆破: false\n是否开启考试风控拦截: true\n是否开启复制限制解除: true\n是否开启考试截图替换: false\n截图替换路径: " + FAKE_UPLOAD_FILE_PATH + "\n");
+                    fw.write("是否开启定位修改: false\n经度: \n纬度: \n是否开启地址名修改: false\n地址名: \n是否开启名字修改: false\n名字: \n是否开启随机指纹: true\n是否开启经纬度爆破: false\n是否开启手势自动签到: false\n是否开启签到码自动签到: false\n是否开启考试风控拦截: true\n是否开启复制限制解除: true\n是否开启考试截图替换: false\n截图替换路径: " + FAKE_UPLOAD_FILE_PATH + "\n");
                     fw.close();
                 } catch (Exception e) {}
                 cachedConfig = config;
@@ -1459,6 +1589,8 @@ public class MainHook implements IXposedHookLoadPackage {
                     else if (line.startsWith("名字:")) config.name = parseStringValue(line);
                     else if (line.startsWith("是否开启随机指纹:")) config.randomizeDeviceFlag = parseBooleanValue(line);
                     else if (line.startsWith("是否开启经纬度爆破:")) config.autoCalculateLocation = parseBooleanValue(line);
+                    else if (line.startsWith("是否开启手势自动签到:")) config.autoGestureSign = parseBooleanValue(line);
+                    else if (line.startsWith("是否开启签到码自动签到:")) config.autoCodeSign = parseBooleanValue(line);
                     else if (line.startsWith("是否开启考试风控拦截:")) config.bypassExamCheat = parseBooleanValue(line);
                     else if (line.startsWith("是否开启复制限制解除:")) config.enableCopyRestriction = parseBooleanValue(line);
                     else if (line.startsWith("是否开启考试截图替换:")) config.replaceExamScreenshot = parseBooleanValue(line);

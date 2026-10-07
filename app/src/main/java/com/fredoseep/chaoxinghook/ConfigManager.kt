@@ -22,6 +22,8 @@ object ConfigManager {
         var name: String = "",
         var randomizeDeviceFlag: Boolean = true,
         var autoCalculateLocation: Boolean = false,
+        var autoGestureSign: Boolean = false,
+        var autoCodeSign: Boolean = false,
         var bypassExamCheat: Boolean = true,
         var enableCopyRestriction: Boolean = true,
         var replaceExamScreenshot: Boolean = false,
@@ -61,6 +63,8 @@ object ConfigManager {
         append("名字: ").append(config.name).append('\n')
         append("是否开启随机指纹: ").append(config.randomizeDeviceFlag).append('\n')
         append("是否开启经纬度爆破: ").append(config.autoCalculateLocation).append('\n')
+        append("是否开启手势自动签到: ").append(config.autoGestureSign).append('\n')
+        append("是否开启签到码自动签到: ").append(config.autoCodeSign).append('\n')
         append("是否开启考试风控拦截: ").append(config.bypassExamCheat).append('\n')
         append("是否开启复制限制解除: ").append(config.enableCopyRestriction).append('\n')
         append("是否开启考试截图替换: ").append(config.replaceExamScreenshot).append('\n')
@@ -81,6 +85,8 @@ object ConfigManager {
                 l.startsWith("名字:") -> config.name = parseString(l)
                 l.startsWith("是否开启随机指纹:") -> config.randomizeDeviceFlag = parseBoolean(l)
                 l.startsWith("是否开启经纬度爆破:") -> config.autoCalculateLocation = parseBoolean(l)
+                l.startsWith("是否开启手势自动签到:") -> config.autoGestureSign = parseBoolean(l)
+                l.startsWith("是否开启签到码自动签到:") -> config.autoCodeSign = parseBoolean(l)
                 l.startsWith("是否开启考试风控拦截:") -> config.bypassExamCheat = parseBoolean(l)
                 l.startsWith("是否开启复制限制解除:") -> config.enableCopyRestriction = parseBoolean(l)
                 l.startsWith("是否开启考试截图替换:") -> config.replaceExamScreenshot = parseBoolean(l)
