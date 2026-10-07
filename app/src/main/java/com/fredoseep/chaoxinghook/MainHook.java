@@ -1441,7 +1441,7 @@ public class MainHook implements IXposedHookLoadPackage {
                 + "    var rd=new DOMParser().parseFromString(x.responseText,'text/html');\n"
                 + "    var el=rd.getElementById('code');\n"
                 + "    var code=el?String(el.getAttribute('value')||el.value||''):'';\n"
-                + "    if(!/^\\d{4,}$/.test(code))return;\n"
+                + "    if(!/^\\d{4,8}$/.test(code))return;\n"
                 + "    if(mode==='gesture'){\n"
                 + "     var hidden=d.getElementById('code');\n"
                 + "     var jq=window.jQuery;\n"
@@ -1452,14 +1452,16 @@ public class MainHook implements IXposedHookLoadPackage {
                 + "     jq('#gesturepwd',d).trigger('hasPasswd',[code]);\n"
                 + "     unlock(d,aid);\n"
                 + "    }else{\n"
-                + "     if(code.length!==4)return;\n"
+                // 签到码长度 4-8 位可变：格数由活动配置决定（页面按 numberCount 动态补格子），码长必须与格数一致
                 + "     var by={},ins=d.querySelectorAll('input[codeIndex]');\n"
                 + "     for(var n=0;n<ins.length;n++)by[ins[n].getAttribute('codeIndex')]=ins[n];\n"
+                + "     var cnt=ins.length;\n"
+                + "     if(cnt<4||cnt>8||code.length!==cnt)return;\n"
                 // 逐格填写。页面的 keydown 处理器会先清空格子，因此绝不能派发 keydown，只走 input/change；
                 // 填完再同步隐藏主输入框 #mobileInput（移动端真实输入通道）
                 + "     var i2=0;\n"
                 + "     function fillNext(){\n"
-                + "      if(i2>=4){\n"
+                + "      if(i2>=cnt){\n"
                 + "       try{\n"
                 + "        var mi=d.getElementById('mobileInput');\n"
                 + "        if(mi){\n"
