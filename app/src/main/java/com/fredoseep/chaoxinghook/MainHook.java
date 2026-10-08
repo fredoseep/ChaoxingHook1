@@ -912,8 +912,7 @@ public class MainHook implements IXposedHookLoadPackage {
                                     if (cfg.autoGestureSign || cfg.autoCodeSign) {
                                         String cfgLat = cfg.modifyLocation ? cfg.latitude.replaceAll("[^0-9.\\-]", "") : "";
                                         String cfgLon = cfg.modifyLocation ? cfg.longitude.replaceAll("[^0-9.\\-]", "") : "";
-                                        wv.evaluateJavascript(buildAutoCodeSignJs(cfg.autoGestureSign, cfg.autoCodeSign, cfgLat, cfgLon),
-                                                r -> debugLog("autosign inject: " + r));
+                                        wv.evaluateJavascript(buildAutoCodeSignJs(cfg.autoGestureSign, cfg.autoCodeSign, cfgLat, cfgLon), null);
                                     }
                                 } catch (Throwable ignored) {}
                             }
@@ -1099,7 +1098,6 @@ public class MainHook implements IXposedHookLoadPackage {
         }
         if (injectedLongPressRows.containsKey(row)) return;
         injectedLongPressRows.put(row, Boolean.TRUE);
-        debugLog("longpress-entry: 已注入设置行长按 (row=" + row.getClass().getName() + ")");
         row.setOnLongClickListener(v -> {
             try {
                 EmbeddedSettings.show(v.getContext());
@@ -1177,18 +1175,17 @@ public class MainHook implements IXposedHookLoadPackage {
         try {
             synchronized (postSignBridges) {
                 if (postSignBridges.containsKey(view)) return;
-                PostSignBridge bridge = new PostSignBridge(view.getContext().getApplicationContext());
+                PostSignBridge bridge = new PostSignBridge(view.getContext().getApplicationContext(), view);
                 view.addJavascriptInterface(bridge, "__cxPostSignV1");
                 postSignBridges.put(view, bridge);
             }
-            debugLog("POST-SIGN bridge attached");
         } catch (Throwable t) { debugLog("POST-SIGN attach FAILED: " + t); }
     }
 
     private void injectPostSignScript(android.webkit.WebView view) {
         attachPostSignBridge(view);
         try {
-            view.evaluateJavascript(POST_SIGN_SCRIPT, result -> debugLog("POST-SIGN inject: " + result));
+            view.evaluateJavascript(POST_SIGN_SCRIPT, null);
         } catch (Throwable t) { debugLog("POST-SIGN inject FAILED: " + t); }
     }
 
@@ -1198,6 +1195,8 @@ public class MainHook implements IXposedHookLoadPackage {
         private final java.util.LinkedHashMap<String, PostAttempt> pending = new java.util.LinkedHashMap<>();
         private double[] target;
         private String session = "";
+        private volatile boolean hunting = false;
+        private String formTemplate = "";
         private long sequence;
         private long generation;
         private final class PostAttempt {
@@ -1210,7 +1209,12 @@ public class MainHook implements IXposedHookLoadPackage {
                 this.time = android.os.SystemClock.elapsedRealtime();
             }
         }
-        PostSignBridge(android.content.Context context) { this.context = context; }
+        private String pageUrl;
+        private String userAgent;
+        PostSignBridge(android.content.Context context, android.webkit.WebView view) {
+            this.context = context;
+            try { this.pageUrl = view.getUrl(); this.userAgent = view.getSettings().getUserAgentString(); } catch (Throwable ignored) {}
+        }
 
         @android.webkit.JavascriptInterface
         public synchronized String prepare(String url, String body) {
@@ -1236,6 +1240,7 @@ public class MainHook implements IXposedHookLoadPackage {
                     changeLocation = false;
                 }
                 if (!changeLocation && !changeAddress && !changeName) return "{}";
+                if (changeLocation) formTemplate = body;
                 double lat = Double.NaN, lon = Double.NaN;
                 if (changeLocation) {
                     String key = form.getOrDefault("activeId", "") + "|" + form.getOrDefault("courseId", "")
@@ -1316,13 +1321,15 @@ public class MainHook implements IXposedHookLoadPackage {
                     collectResponseStrings(new org.json.JSONTokener(response).nextValue(), text, 0);
                     messages += "\n" + text;
                 } catch (Exception ignored) { }
-                Matcher m = Pattern.compile("距.*?([0-9.]+)\\s*米").matcher(messages);
-                if (m.find()) {
-                    double distance = Double.parseDouble(m.group(1));
+                // 双格式距离反馈：距…X米 与 errorLocation2_X
+                Double parsed = parseDistance(messages);
+                if (parsed != null) {
+                    double distance = parsed;
                     if (!Double.isFinite(distance) || distance < 0) return;
                     if (target != null) target = null;
                     points.add(new LocationPoint(attempt.lat, attempt.lon, distance));
                     if (points.size() > 3) points.remove(0);
+                    if (!hunting && !formTemplate.isEmpty()) { startHunt(); return; }
                     if (points.size() == 3) {
                         target = calculateTriangulation(points); // Reuse the baseline solver verbatim.
                         if (target != null && validCoordinates(target[0], target[1])) {
@@ -1333,7 +1340,6 @@ public class MainHook implements IXposedHookLoadPackage {
                     } else notifyResult("距离 " + distance + " 米，采集进度 " + points.size() + "/3，请再次点击");
                     debugLog("POST-SIGN distance id=" + id + " meters=" + distance + " samples=" + points.size());
                 } else {
-                    debugLog("POST-SIGN response id=" + id + " status=" + status + " distance-not-found chars=" + response.length());
                     String trimmed = response.trim();
                     if ("success".equalsIgnoreCase(trimmed) || messages.contains("签到成功")) {
                         points.clear(); target = null; notifyResult("签到成功，已清空距离采样");
@@ -1341,6 +1347,202 @@ public class MainHook implements IXposedHookLoadPackage {
                 }
             } catch (Throwable t) { debugLog("POST-SIGN response FAILED: " + t.getClass().getSimpleName()); }
         }
+        /** 后台靶心搜索：用捕获的表单模板自行发探测请求（页面跳走不受影响），采距→最小二乘→终射 */
+        private void startHunt() {
+            hunting = true;
+            final String template = formTemplate;
+            final long gen = generation;
+            final LocationPoint first = points.get(points.size() - 1);
+            new Thread(() -> {
+                try {
+                    hunt(template, gen, first.lat, first.lon, first.distance);
+                } catch (Throwable t) {
+                    debugLog("HUNT err: " + t);
+                    notifyResult("靶心搜索异常：" + t.getClass().getSimpleName());
+                } finally {
+                    hunting = false;
+                }
+            }, "cx-hunt").start();
+        }
+
+        private void hunt(String template, long gen, double lat0, double lon0, double firstDist) throws Exception {
+            notifyResult("开始自动搜索靶心（首个距离约 " + Math.round(firstDist) + " 米）");
+            java.util.List<LocationPoint> samples = new java.util.ArrayList<>();
+            samples.add(new LocationPoint(lat0, lon0, firstDist));
+            // 抖动幅度随首距自适应：近距固定 ~2km，远距放到距离的 ~60%（防远场病态）
+            double scale = Math.max(0.02, Math.min(3.0, firstDist / 111320.0 * 0.6));
+            double[][] spread = {{1,1},{-1,1},{1,-1},{-1,-1},{0,1}};
+            for (double[] s : spread) {
+                Thread.sleep(500);
+                if (gen != generation) { debugLog("HUNT abort: session changed"); return; }
+                double plat = lat0 + s[0] * scale, plon = lon0 + s[1] * scale;
+                String resp = httpSign(buildBody(template, plat, plon));
+                if (isSuccess(resp)) { notifyResult("签到成功 ✔（探测阶段即命中）"); return; }
+                Double dist = parseDistance(resp);
+                if (dist == null) { debugLog("HUNT probe no-distance: " + trimResp(resp)); continue; }
+                samples.add(new LocationPoint(plat, plon, dist));
+                debugLog("HUNT probe (" + plat + "," + plon + ") -> " + Math.round(dist) + "m, samples=" + samples.size());
+            }
+            double[] t = solveTarget(samples);
+            if (t == null || !validCoordinates(t[0], t[1])) { notifyResult("靶心求解失败（样本不足），可再进一次活动继续"); return; }
+            debugLog("HUNT coarse target: " + t[0] + "," + t[1]);
+            // 阶段2：迭代收缩——每轮射当前估计，再按当前距离等比抖动补 3 个局部样本重解
+            for (int round = 0; round < 12; round++) {
+                Thread.sleep(600);
+                if (gen != generation) return;
+                String resp = httpSign(buildBody(template, t[0], t[1]));
+                if (isSuccess(resp)) {
+                    synchronized (this) { target = t; }
+                    debugLog("HUNT final success @ " + t[0] + "," + t[1]);
+                    notifyResult("靶心已锁定，签到成功 ✔");
+                    return;
+                }
+                Double dist = parseDistance(resp);
+                debugLog("HUNT round#" + round + " est=" + t[0] + "," + t[1] + " resp=" + trimResp(resp));
+                if (dist == null) break;
+                samples.add(new LocationPoint(t[0], t[1], dist));
+                if (dist < 120) break; // 距离已小于常见 range，服务端仍拒则非距离问题
+                double s2 = Math.max(0.0003, dist / 111320.0 * 0.7);
+                double[][] local = {{s2, 0}, {-s2, s2 * 0.5}, {0, -s2}};
+                for (double[] off : local) {
+                    Thread.sleep(400);
+                    if (gen != generation) return;
+                    double plat = t[0] + off[0], plon = t[1] + off[1];
+                    String r2 = httpSign(buildBody(template, plat, plon));
+                    if (isSuccess(r2)) {
+                        synchronized (this) { target = new double[]{plat, plon}; }
+                        debugLog("HUNT local success @ " + plat + "," + plon);
+                        notifyResult("靶心已锁定，签到成功 ✔");
+                        return;
+                    }
+                    Double d2 = parseDistance(r2);
+                    if (d2 != null) samples.add(new LocationPoint(plat, plon, d2));
+                }
+                // 近场后丢弃远场样本再解算：距离阈值取当前距离的 4 倍（下限 3km），消除远场梯度干扰
+                java.util.List<LocationPoint> solveSet = samples;
+                if (dist < 3000) {
+                    double limit = Math.max(3000, dist * 4);
+                    java.util.List<LocationPoint> near = new java.util.ArrayList<>();
+                    for (LocationPoint sp : samples) if (sp.distance <= limit) near.add(sp);
+                    if (near.size() >= 3) solveSet = near;
+                }
+                double[] nt = solveTarget(solveSet);
+                if (nt == null || !validCoordinates(nt[0], nt[1])) break;
+                t = nt;
+                debugLog("HUNT round#" + round + " refined: " + t[0] + "," + t[1] + " set=" + solveSet.size() + "/" + samples.size());
+            }
+            notifyResult("自动搜索未成功，已采集 " + samples.size() + " 点；可再进一次活动继续逼近");
+        }
+
+        private String buildBody(String template, double lat, double lon) throws Exception {
+            StringBuilder sb = new StringBuilder();
+            for (String part : template.split("&", -1)) {
+                int eq = part.indexOf('=');
+                if (eq < 0) continue;
+                String k = java.net.URLDecoder.decode(part.substring(0, eq), "UTF-8");
+                String v = java.net.URLDecoder.decode(part.substring(eq + 1), "UTF-8");
+                if ("latitude".equals(k)) v = Double.toString(lat);
+                else if ("longitude".equals(k)) v = Double.toString(lon);
+                else if ("location".equals(k) || "locationResult".equals(k)) {
+                    // 与 prepare() 同款：原 JSON 只换坐标，保留其余字段（含原生签名信息）
+                    try {
+                        org.json.JSONObject o = new org.json.JSONObject(v);
+                        o.put("latitude", lat).put("longitude", lon);
+                        if (!o.has("result")) o.put("result", 1);
+                        v = o.toString();
+                    } catch (Exception e) {
+                        v = new org.json.JSONObject().put("result", 1).put("address", "")
+                                .put("longitude", lon).put("latitude", lat).toString();
+                    }
+                }
+                else if ("deviceCode".equals(k)) v = randomDeviceCode();
+                if (sb.length() > 0) sb.append('&');
+                sb.append(java.net.URLEncoder.encode(k, "UTF-8")).append('=')
+                  .append(java.net.URLEncoder.encode(v, "UTF-8"));
+            }
+            return sb.toString();
+        }
+
+        private String randomDeviceCode() {
+            byte[] b = new byte[32];
+            new java.security.SecureRandom().nextBytes(b);
+            return android.util.Base64.encodeToString(b, android.util.Base64.NO_WRAP);
+        }
+
+        private String httpSign(String body) throws Exception {
+            String cookie = android.webkit.CookieManager.getInstance().getCookie("https://mobilelearn.chaoxing.com");
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) new java.net.URL(
+                    "https://mobilelearn.chaoxing.com/pptSign/stuSignajax").openConnection();
+            conn.setRequestMethod("POST");
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+            if (cookie != null) conn.setRequestProperty("Cookie", cookie);
+            if (userAgent != null) conn.setRequestProperty("User-Agent", userAgent);
+            if (pageUrl != null) conn.setRequestProperty("Referer", pageUrl);
+            conn.setRequestProperty("X-Requested-With", "XMLHttpRequest");
+            conn.setRequestProperty("Origin", "https://mobilelearn.chaoxing.com");
+            conn.setRequestProperty("Accept", "*/*");
+            conn.setDoOutput(true);
+            try (java.io.OutputStream os = conn.getOutputStream()) {
+                os.write(body.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+            int code = conn.getResponseCode();
+            java.io.InputStream in = code >= 400 ? conn.getErrorStream() : conn.getInputStream();
+            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+            if (in != null) { byte[] buf = new byte[4096]; int n; while ((n = in.read(buf)) > 0) bo.write(buf, 0, n); in.close(); }
+            String resp = new String(bo.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+            debugLog("HUNT http " + code + " " + trimResp(resp));
+            return resp;
+        }
+
+        private String trimResp(String s) {
+            if (s == null) return "null";
+            String t = s.trim().replace("\n", " ");
+            return t.substring(0, Math.min(70, t.length()));
+        }
+
+        /** 兼容两种距离反馈：距…X米 与 errorLocation2_X */
+        private Double parseDistance(String resp) {
+            if (resp == null) return null;
+            Matcher m = Pattern.compile("距.*?([0-9.]+)\\s*米").matcher(resp);
+            if (m.find()) return Double.parseDouble(m.group(1));
+            m = Pattern.compile("errorLocation2_([0-9.]+)").matcher(resp);
+            if (m.find()) return Double.parseDouble(m.group(1));
+            return null;
+        }
+
+        private boolean isSuccess(String resp) {
+            return resp != null && ("success".equalsIgnoreCase(resp.trim()) || resp.contains("签到成功"));
+        }
+
+        /** 多点最小二乘反解靶心（等距柱面近似 + 迭代） */
+        double[] solveTarget(java.util.List<LocationPoint> pts) {
+            if (pts.size() < 3) return null;
+            double lat0 = 0, lon0 = 0;
+            for (LocationPoint p : pts) { lat0 += p.lat; lon0 += p.lon; }
+            lat0 /= pts.size(); lon0 /= pts.size();
+            double kx = 111320.0 * Math.cos(Math.toRadians(lat0)), ky = 111320.0;
+            LocationPoint best = pts.get(0);
+            for (LocationPoint p : pts) if (p.distance < best.distance) best = p;
+            double x = (best.lon - lon0) * kx, y = (best.lat - lat0) * ky;
+            for (int it = 0; it < 200; it++) {
+                double a11 = 0, a12 = 0, a22 = 0, b1 = 0, b2 = 0;
+                for (LocationPoint p : pts) {
+                    double px = (p.lon - lon0) * kx, py = (p.lat - lat0) * ky;
+                    double den = Math.hypot(x - px, y - py); if (den < 1e-9) den = 1e-9;
+                    double ux = (x - px) / den, uy = (y - py) / den, r = p.distance - den;
+                    a11 += ux * ux; a12 += ux * uy; a22 += uy * uy; b1 += ux * r; b2 += uy * r;
+                }
+                double det = a11 * a22 - a12 * a12;
+                if (Math.abs(det) < 1e-18) return null;
+                double dx = (b1 * a22 - a12 * b2) / det, dy = (a11 * b2 - b1 * a12) / det;
+                x += dx; y += dy;
+                if (Math.hypot(dx, dy) < 1e-3) break;
+            }
+            return new double[]{ lat0 + y / ky, lon0 + x / kx };
+        }
+
         private void notifyResult(String message) {
             new android.os.Handler(android.os.Looper.getMainLooper()).post(() ->
                     android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show());
@@ -1392,6 +1594,7 @@ public class MainHook implements IXposedHookLoadPackage {
                 + " window.__cxAutoCodeV1=true;\n"
                 + " var GESTURE_ON=" + gestureOn + ",CODE_ON=" + codeOn + ";\n"
                 + " var CFG_LAT='" + cfgLat + "',CFG_LON='" + cfgLon + "';\n"
+                + " function st(o){}\n"
                 + " function aidOf(search){try{var q=new URLSearchParams(search);return q.get('activeId')||q.get('activePrimaryId')||'';}catch(e){return '';}}\n"
                 + " function docs(){var a=[document];try{var f=document.querySelectorAll('iframe');for(var i=0;i<f.length;i++){var d=f[i].contentDocument;if(d)a.push(d);}}catch(e){}return a;}\n"
                 + " var tries=0;\n"
@@ -1399,19 +1602,19 @@ public class MainHook implements IXposedHookLoadPackage {
                 + " function unlock(d2,aid2){\n"
                 + "  try{\n"
                 + "   var ioa=d2.getElementById('ifopenAddress');\n"
-                + "   if(!ioa||String(ioa.value||'')!=='1')return;\n"
+                + "   if(!ioa||String(ioa.value||'')!=='1'){st({step:'no-loc-needed'});return;}\n"
                 + "   var x2=new XMLHttpRequest();\n"
                 + "   x2.onreadystatechange=function(){\n"
                 + "    if(x2.readyState!==4)return;\n"
                 + "    var lat='',lon='',txt='';\n"
                 + "    try{var j=JSON.parse(x2.responseText);var dd=(j&&j.data)?j.data:j;if(dd){lat=String(dd.locationLatitude||'');lon=String(dd.locationLongitude||'');txt=String(dd.locationText||'');}}catch(e){}\n"
                 + "    if(!lat||!lon){\n"
-                + "     if(CFG_LAT&&CFG_LON){lat=CFG_LAT;lon=CFG_LON;txt='';}\n"
-                + "     else return;\n"
-                + "    }\n"
+                + "     if(CFG_LAT&&CFG_LON){lat=CFG_LAT;lon=CFG_LON;txt='';st({step:'loc-cfg-coords'});}\n"
+                + "     else{st({step:'loc-no-coords',http:x2.status});return;}\n"
+                + "    }else st({step:'loc-api-coords',lat:lat,lon:lon});\n"
                 + "    var loc={result:1,address:txt,longitude:parseFloat(lon),latitude:parseFloat(lat)};\n"
                 + "    setTimeout(function(){\n"
-                + "     try{if(window.jsBridge&&typeof window.jsBridge.trigger==='function')window.jsBridge.trigger('CLIENT_USER_LOCATION',loc);}catch(e){}\n"
+                + "     try{if(window.jsBridge&&typeof window.jsBridge.trigger==='function'){window.jsBridge.trigger('CLIENT_USER_LOCATION',loc);st({step:'loc-pushed',lat:loc.latitude,lon:loc.longitude});}else st({step:'no-jsbridge'});}catch(e){st({step:'loc-push-fail',err:String(e)});}\n"
                 + "    },1200);\n"
                 + "   };\n"
                 + "   x2.open('GET','/v2/apis/active/getPPTActiveInfo?activeId='+encodeURIComponent(aid2),true);\n"
@@ -1441,7 +1644,8 @@ public class MainHook implements IXposedHookLoadPackage {
                 + "    var rd=new DOMParser().parseFromString(x.responseText,'text/html');\n"
                 + "    var el=rd.getElementById('code');\n"
                 + "    var code=el?String(el.getAttribute('value')||el.value||''):'';\n"
-                + "    if(!/^\\d{4,8}$/.test(code))return;\n"
+                + "    if(!/^\\d{4,8}$/.test(code)){st({step:'bad-code'});return;}\n"
+                + "    st({step:'fetched',mode:mode,len:code.length});\n"
                 + "    if(mode==='gesture'){\n"
                 + "     var hidden=d.getElementById('code');\n"
                 + "     var jq=window.jQuery;\n"
@@ -1449,6 +1653,7 @@ public class MainHook implements IXposedHookLoadPackage {
                 + "     if(!jq||!jq.fn)return;\n"
                 // 部分 gesture 模板没有 #code 隐藏域，hasPasswd 处理器自行比对/上报
                 + "     if(hidden)hidden.value=code;\n"
+                + "     st({step:'triggered'});\n"
                 + "     jq('#gesturepwd',d).trigger('hasPasswd',[code]);\n"
                 + "     unlock(d,aid);\n"
                 + "    }else{\n"
@@ -1471,6 +1676,7 @@ public class MainHook implements IXposedHookLoadPackage {
                 + "         try{if(window.jQuery&&window.jQuery.fn)window.jQuery(mi).trigger('input').trigger('propertychange');}catch(e){}\n"
                 + "        }\n"
                 + "       }catch(e){}\n"
+                + "       st({step:'filled'});\n"
                 + "       unlock(d,aid);\n"
                 + "       return;\n"
                 + "      }\n"
@@ -1552,6 +1758,10 @@ public class MainHook implements IXposedHookLoadPackage {
         return sb.toString();
     }
 
+    private static String defaultConfigTemplate() {
+        return "是否开启定位修改: false\n经度: \n纬度: \n是否开启地址名修改: false\n地址名: \n是否开启名字修改: false\n名字: \n是否开启随机指纹: true\n是否开启经纬度爆破: false\n是否开启手势自动签到: false\n是否开启签到码自动签到: false\n是否开启考试风控拦截: true\n是否开启复制限制解除: true\n是否开启考试截图替换: false\n截图替换路径: " + FAKE_UPLOAD_FILE_PATH + "\n";
+    }
+
     private SignConfig getSignConfig() {
         // 核心修复：防止底层死循环读取
         if (Boolean.TRUE.equals(READING_CONFIG.get())) {
@@ -1563,46 +1773,30 @@ public class MainHook implements IXposedHookLoadPackage {
         READING_CONFIG.set(true);
         try {
             SignConfig config = new SignConfig();
-            File file = ConfigStorage.file(AndroidAppHelper.currentApplication());
-
-            if (!file.exists() && !new File(file.getPath() + ".bak").exists()) {
-                try {
-                    file.getParentFile().mkdirs();
-                    FileWriter fw = new FileWriter(file);
-                    fw.write("是否开启定位修改: false\n经度: \n纬度: \n是否开启地址名修改: false\n地址名: \n是否开启名字修改: false\n名字: \n是否开启随机指纹: true\n是否开启经纬度爆破: false\n是否开启手势自动签到: false\n是否开启签到码自动签到: false\n是否开启考试风控拦截: true\n是否开启复制限制解除: true\n是否开启考试截图替换: false\n截图替换路径: " + FAKE_UPLOAD_FILE_PATH + "\n");
-                    fw.close();
-                } catch (Exception e) {}
-                cachedConfig = config;
-                lastReadTime = System.currentTimeMillis();
-                return config;
+            // 走 ConfigStorage.read：首选统一路径失败自动回退私有目录，杜绝「静默全默认」
+            String text = ConfigStorage.read(AndroidAppHelper.currentApplication(), defaultConfigTemplate());
+            for (String line : text.split("\\r?\\n")) {
+                line = line.trim();
+                if (line.startsWith("是否开启定位修改:")) config.modifyLocation = parseBooleanValue(line);
+                else if (line.startsWith("经度:")) config.longitude = parseStringValue(line);
+                else if (line.startsWith("纬度:")) config.latitude = parseStringValue(line);
+                else if (line.startsWith("是否开启地址名修改:")) config.modifyAddress = parseBooleanValue(line);
+                else if (line.startsWith("地址名:")) config.address = parseStringValue(line);
+                else if (line.startsWith("是否开启名字修改:")) config.modifyName = parseBooleanValue(line);
+                else if (line.startsWith("名字:")) config.name = parseStringValue(line);
+                else if (line.startsWith("是否开启随机指纹:")) config.randomizeDeviceFlag = parseBooleanValue(line);
+                else if (line.startsWith("是否开启经纬度爆破:")) config.autoCalculateLocation = parseBooleanValue(line);
+                else if (line.startsWith("是否开启手势自动签到:")) config.autoGestureSign = parseBooleanValue(line);
+                else if (line.startsWith("是否开启签到码自动签到:")) config.autoCodeSign = parseBooleanValue(line);
+                else if (line.startsWith("是否开启考试风控拦截:")) config.bypassExamCheat = parseBooleanValue(line);
+                else if (line.startsWith("是否开启复制限制解除:")) config.enableCopyRestriction = parseBooleanValue(line);
+                else if (line.startsWith("是否开启考试截图替换:")) config.replaceExamScreenshot = parseBooleanValue(line);
+                else if (line.startsWith("截图替换路径:")) config.fakeImagePath = parseStringValue(line);
             }
-
-            try (BufferedReader br = new BufferedReader(new java.io.InputStreamReader(
-                    new android.util.AtomicFile(file).openRead(), java.nio.charset.StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    line = line.trim();
-                    if (line.startsWith("是否开启定位修改:")) config.modifyLocation = parseBooleanValue(line);
-                    else if (line.startsWith("经度:")) config.longitude = parseStringValue(line);
-                    else if (line.startsWith("纬度:")) config.latitude = parseStringValue(line);
-                    else if (line.startsWith("是否开启地址名修改:")) config.modifyAddress = parseBooleanValue(line);
-                    else if (line.startsWith("地址名:")) config.address = parseStringValue(line);
-                    else if (line.startsWith("是否开启名字修改:")) config.modifyName = parseBooleanValue(line);
-                    else if (line.startsWith("名字:")) config.name = parseStringValue(line);
-                    else if (line.startsWith("是否开启随机指纹:")) config.randomizeDeviceFlag = parseBooleanValue(line);
-                    else if (line.startsWith("是否开启经纬度爆破:")) config.autoCalculateLocation = parseBooleanValue(line);
-                    else if (line.startsWith("是否开启手势自动签到:")) config.autoGestureSign = parseBooleanValue(line);
-                    else if (line.startsWith("是否开启签到码自动签到:")) config.autoCodeSign = parseBooleanValue(line);
-                    else if (line.startsWith("是否开启考试风控拦截:")) config.bypassExamCheat = parseBooleanValue(line);
-                    else if (line.startsWith("是否开启复制限制解除:")) config.enableCopyRestriction = parseBooleanValue(line);
-                    else if (line.startsWith("是否开启考试截图替换:")) config.replaceExamScreenshot = parseBooleanValue(line);
-                    else if (line.startsWith("截图替换路径:")) config.fakeImagePath = parseStringValue(line);
-                }
-            } catch (Exception e) {}
-
             cachedConfig = config;
             lastReadTime = System.currentTimeMillis();
             return config;
+
         } catch (Exception e) {
             debugLog("config-read FAILED: " + e);
             return cachedConfig != null ? cachedConfig : new SignConfig();
