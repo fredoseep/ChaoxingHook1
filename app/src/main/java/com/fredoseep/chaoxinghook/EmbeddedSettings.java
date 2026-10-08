@@ -86,7 +86,7 @@ public final class EmbeddedSettings {
         int pad = (int) (16 * activity.getResources().getDisplayMetrics().density);
         body.setPadding(pad, pad, pad, pad);
         TextView intro = new TextView(activity);
-        intro.setText("配置统一保存在公共 Download 目录，模块 App 与学习通内共用同一份。\n学习通内修改约 3 秒后生效；读写失败时自动回退各自私有目录。\n经纬度可直接输入；图片请用下方系统选择器导入。\n" + ConfigStorage.file(activity).getPath());
+        intro.setText("配置保存在学习通私有目录，约 3 秒后生效。\n模块 App 需 Root 授权后可直接读写这份配置。\n经纬度可直接输入；图片请用下方系统选择器导入。\n" + ConfigStorage.file(activity).getPath());
         body.addView(intro);
         for (String key : KEYS) {
             if (key.startsWith("是否")) {
@@ -105,7 +105,6 @@ public final class EmbeddedSettings {
             }
         }
         reload();
-        maybeRequestStorage(body);
         // 定位修改 / 经纬度爆破 互斥（与模块 App 设置页一致）：开启一个自动关掉另一个。
         // 必须在 reload() 之后挂监听，否则载入「两者同开」的历史配置时会互相清掉。
         Switch modifyLocSwitch = (Switch) fields.get("是否开启定位修改");
@@ -158,7 +157,7 @@ public final class EmbeddedSettings {
         });
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             if (!readable) { toast("未成功读取原配置，请重读或显式导入／重置"); return; }
-            try { ConfigStorage.write(activity, serializeFields()); toast("配置已保存：" + ConfigStorage.lastUsedPath); }
+            try { ConfigStorage.write(activity, serializeFields()); toast("配置已保存"); }
             catch (Exception e) { error(e); }
         }));
         dialog.show();
@@ -175,24 +174,6 @@ public final class EmbeddedSettings {
         } catch (Exception e) { readable = false; error(e); }
     }
 
-    /**
-     * 统一配置在公共 Download：宿主（旧存储视图）需要运行时存储权限。
-     * 缺权限时弹系统原生授权弹窗（归属宿主），并延时自动重读（授权后字段即恢复；
-     * 部分系统对该权限已不再弹窗，则维持私有目录回退，不影响弹窗其他功能）。
-     */
-    private void maybeRequestStorage(android.view.View anyView) {
-        try {
-            String write = "android.permission.WRITE_EXTERNAL_STORAGE";
-            if (activity.checkSelfPermission(write) == android.content.pm.PackageManager.PERMISSION_GRANTED) return;
-            activity.requestPermissions(
-                new String[]{write, "android.permission.READ_EXTERNAL_STORAGE"}, 0x6C59);
-            toast("需要存储权限以读写统一配置，请在系统弹窗中允许");
-            anyView.postDelayed(this::reload, 3000);
-            anyView.postDelayed(this::reload, 8000);
-        } catch (Throwable t) {
-            toast("请到系统设置授予学习通存储权限");
-        }
-    }
     private String serializeFields() {
         StringBuilder text = new StringBuilder();
         for (String key : KEYS) {

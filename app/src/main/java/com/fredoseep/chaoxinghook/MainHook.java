@@ -1773,7 +1773,7 @@ public class MainHook implements IXposedHookLoadPackage {
         READING_CONFIG.set(true);
         try {
             SignConfig config = new SignConfig();
-            // 走 ConfigStorage.read：首选统一路径失败自动回退私有目录，杜绝「静默全默认」
+            // 走 ConfigStorage.read（宿主私有目录，上游实现）；读取异常由 catch 兜底默认配置
             String text = ConfigStorage.read(AndroidAppHelper.currentApplication(), defaultConfigTemplate());
             for (String line : text.split("\\r?\\n")) {
                 line = line.trim();

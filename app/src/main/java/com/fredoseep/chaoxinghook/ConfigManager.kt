@@ -2,14 +2,16 @@ package com.fredoseep.chaoxinghook
 
 import android.content.Context
 
-/** 独立 APK 使用自己的私有文件。宿主内设置直接使用宿主文件，无需 Root。 */
+/** 模块 App 经 root 读写宿主的配置文件（Android/data 跨应用硬隔离，唯一通道是 su）；
+ *  无 root 时回退本 App 私有副本（与上游行为一致）。宿主内设置页始终直用宿主文件。 */
 object ConfigManager {
     const val CONFIG_PATH = "/storage/emulated/0/Android/data/com.chaoxing.mobile/files/chaoxing_loc.txt"
     const val DEFAULT_FAKE_IMAGE_PATH = "/storage/emulated/0/Download/fake_exam_image.png"
     private var appContext: Context? = null
     fun initialize(context: Context) { appContext = context.applicationContext }
     private fun context(): Context = checkNotNull(appContext) { "请先初始化 ConfigManager" }
-    @Volatile var loadFailed: Boolean = false
+    /** 最近一次 root 读写宿主配置是否成功（UI 提示用） */
+    @Volatile var rootBridgeOk: Boolean = false
         private set
 
     data class HookConfig(
@@ -31,22 +33,31 @@ object ConfigManager {
     )
 
     fun load(): HookConfig = try {
-        val text = ConfigStorage.read(context(), serialize(HookConfig()))
-        loadFailed = false
-        parseConfig(text)
+        val hostText = ConfigStorage.readHostByRoot()
+        if (hostText != null) {
+            rootBridgeOk = true
+            parseConfig(hostText)
+        } else {
+            // 无 root / 宿主文件缺失：退回本 App 私有副本
+            rootBridgeOk = false
+            parseConfig(ConfigStorage.read(context(), serialize(HookConfig())))
+        }
     } catch (_: Exception) {
-        loadFailed = true
+        rootBridgeOk = false
         HookConfig()
     }
 
-    fun save(config: HookConfig): Boolean {
-        if (loadFailed) return false
-        return write(config)
-    }
+    fun save(config: HookConfig): Boolean = write(config)
     fun reset(): Boolean = write(HookConfig())
     private fun write(config: HookConfig): Boolean = try {
-        ConfigStorage.write(context(), serialize(config))
-        loadFailed = false
+        val text = serialize(config)
+        try {
+            ConfigStorage.writeHostByRoot(text)
+            rootBridgeOk = true
+        } catch (_: Exception) {
+            rootBridgeOk = false
+            ConfigStorage.write(context(), text)
+        }
         true
     } catch (_: Exception) { false }
 
