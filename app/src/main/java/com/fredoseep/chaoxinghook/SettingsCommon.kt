@@ -38,13 +38,12 @@ class HookSettingsState internal constructor(
     val config: ConfigManager.HookConfig get() = configState.value
 
     init {
-        // 读不到磁盘配置时必须说清楚：否则用户看到的是「默认值」，
-        // 会以为自己的配置丢了；实际上磁盘内容原封未动，而且此时也不会被覆盖。
-        if (ConfigManager.loadFailed) {
+        // root 桥不通时必须说清楚：显示的是本 App 私有副本/默认值而非宿主那份
+        if (!ConfigManager.rootBridgeOk) {
             Handler(Looper.getMainLooper()).post {
                 Toast.makeText(
                     context,
-                    "无法读取本地配置，当前显示默认值。读取成功前不会覆盖已保存的配置。",
+                    "未获得 Root 授权，当前读写本 App 私有配置（与学习通内那份不互通）。请在 KernelSU/Magisk 中授权后重开本页。",
                     Toast.LENGTH_LONG,
                 ).show()
             }
@@ -59,8 +58,8 @@ class HookSettingsState internal constructor(
         Toast.makeText(
             context,
             when {
-                ok -> "配置已保存"
-                ConfigManager.loadFailed -> "未读取到配置，已跳过保存以免覆盖"
+                ok && ConfigManager.rootBridgeOk -> "配置已保存（宿主配置）"
+                ok -> "已保存到本 App 私有配置（未获得 Root）"
                 else -> "保存失败，请检查存储空间"
             },
             Toast.LENGTH_SHORT,

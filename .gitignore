@@ -12,3 +12,7 @@ local.properties
 .kotlin/
 # 逆向留档（脱壳 dex/jadx 反编译/APK/截图），体积大且敏感，不入库
 /work/
+
+# 图标预览/对比素材（含从 APK 提取的第三方应用图标，不入库；预览可由 art/make_icon.py 重新生成）
+/art/preview/
+__pycache__/

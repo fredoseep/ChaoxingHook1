@@ -19,10 +19,12 @@ public final class EmbeddedSettings {
     private static final String[] KEYS = {
         "是否开启定位修改", "经度", "纬度", "是否开启地址名修改", "地址名",
         "是否开启名字修改", "名字", "是否开启随机指纹", "是否开启经纬度爆破",
+        "是否开启手势自动签到", "是否开启签到码自动签到",
         "是否开启考试风控拦截", "是否开启复制限制解除", "是否开启考试截图替换", "截图替换路径"
     };
     private static final String[] DEFAULTS = {
-        "false", "", "", "false", "", "false", "", "true", "false", "true", "true", "false",
+        "false", "", "", "false", "", "false", "", "true", "false", "false", "false",
+        "true", "true", "false",
         "/storage/emulated/0/Download/fake_exam_image.png"
     };
     private static final int REQUEST = 0x6C58;
@@ -84,7 +86,7 @@ public final class EmbeddedSettings {
         int pad = (int) (16 * activity.getResources().getDisplayMetrics().density);
         body.setPadding(pad, pad, pad, pad);
         TextView intro = new TextView(activity);
-        intro.setText("配置保存在当前应用中，无需 Root。宿主配置约 3 秒后生效。\n独立模块 APK 的配置需导出后在学习通内导入。\n经纬度可直接输入；图片请用下方系统选择器导入。\n" + ConfigStorage.file(activity).getPath());
+        intro.setText("配置保存在学习通私有目录，约 3 秒后生效。\n模块 App 需 Root 授权后可直接读写这份配置。\n经纬度可直接输入；图片请用下方系统选择器导入。\n" + ConfigStorage.file(activity).getPath());
         body.addView(intro);
         for (String key : KEYS) {
             if (key.startsWith("是否")) {
@@ -103,6 +105,14 @@ public final class EmbeddedSettings {
             }
         }
         reload();
+        // 定位修改 / 经纬度爆破 互斥（与模块 App 设置页一致）：开启一个自动关掉另一个。
+        // 必须在 reload() 之后挂监听，否则载入「两者同开」的历史配置时会互相清掉。
+        Switch modifyLocSwitch = (Switch) fields.get("是否开启定位修改");
+        Switch autoCalcSwitch = (Switch) fields.get("是否开启经纬度爆破");
+        if (modifyLocSwitch != null && autoCalcSwitch != null) {
+            modifyLocSwitch.setOnCheckedChangeListener((btn, on) -> { if (on) autoCalcSwitch.setChecked(false); });
+            autoCalcSwitch.setOnCheckedChangeListener((btn, on) -> { if (on) modifyLocSwitch.setChecked(false); });
+        }
         button(body, "导入配置文件", () -> choose("text/*", false, uri -> {
             String text;
             try (InputStream in = activity.getContentResolver().openInputStream(uri)) {
@@ -163,6 +173,7 @@ public final class EmbeddedSettings {
             readable = true;
         } catch (Exception e) { readable = false; error(e); }
     }
+
     private String serializeFields() {
         StringBuilder text = new StringBuilder();
         for (String key : KEYS) {
