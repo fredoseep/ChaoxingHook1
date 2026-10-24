@@ -242,6 +242,7 @@ public class MainHook implements IXposedHookLoadPackage {
         } catch (Throwable t) {
             debugLog("installExamSnapshotHook FAILED: " + t);
         }
+        QRTesting.hook(lpparam);
         debugLog("=== handleLoadPackage done; business hooks deferred");
     }
 
