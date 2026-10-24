@@ -16,13 +16,16 @@ import java.util.*;
 
 /** Native host dialog: no module Activity, Compose, resources, maps SDK or su required. */
 public final class EmbeddedSettings {
+    private static final String TAG = "CX.Settings";
     private static final String[] KEYS = {
         "是否开启定位修改", "经度", "纬度", "是否开启地址名修改", "地址名",
         "是否开启名字修改", "名字", "是否开启随机指纹", "是否开启经纬度爆破",
+        "是否开启手势自动签到", "是否开启签到码自动签到",
         "是否开启考试风控拦截", "是否开启复制限制解除", "是否开启考试截图替换", "截图替换路径"
     };
     private static final String[] DEFAULTS = {
-        "false", "", "", "false", "", "false", "", "true", "false", "true", "true", "false",
+        "false", "", "", "false", "", "false", "", "true", "false", "false", "false",
+        "true", "true", "false",
         "/storage/emulated/0/Download/fake_exam_image.png"
     };
     private static final int REQUEST = 0x6C58;
@@ -41,10 +44,19 @@ public final class EmbeddedSettings {
     public static void show(Context context, Runnable onClosed) {
         Activity activity = findActivity(context);
         if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+            android.util.Log.e(TAG, "无法打开设置：未找到有效的前台 Activity");
             Toast.makeText(context, "请在学习通前台页面打开设置", Toast.LENGTH_LONG).show();
             return;
         }
-        activity.runOnUiThread(() -> new EmbeddedSettings(activity, onClosed).open());
+        activity.runOnUiThread(() -> {
+            try {
+                new EmbeddedSettings(activity, onClosed).open();
+                android.util.Log.i(TAG, "设置面板已打开");
+            } catch (RuntimeException e) {
+                android.util.Log.e(TAG, "打开设置面板失败", e);
+                throw e;
+            }
+        });
     }
     private static Activity findActivity(Context context) {
         Set<Context> seen = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -259,5 +271,5 @@ public final class EmbeddedSettings {
         } finally { if (tmp.exists()) tmp.delete(); }
     }
     private void toast(String text) { Toast.makeText(activity, text, Toast.LENGTH_LONG).show(); }
-    private void error(Exception e) { toast("配置操作失败：" + e.getMessage()); }
+    private void error(Exception e) { android.util.Log.e(TAG, "配置操作失败", e); toast("配置操作失败：" + e.getMessage()); }
 }

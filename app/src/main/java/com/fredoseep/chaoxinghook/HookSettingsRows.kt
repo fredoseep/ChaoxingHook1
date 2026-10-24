@@ -121,6 +121,22 @@ fun HookSettingsState.buildHookSettingGroups(scaffold: SettingsScaffold): List<H
                 if (cfg.autoCalculateLocation) {
                     addAll(coordinateRows())
                 }
+                add(
+                    HookSettingRow.Toggle(
+                        title = "手势自动签到",
+                        summary = "进手势签到页自动取码并完成",
+                        checked = cfg.autoGestureSign,
+                        onCheckedChange = { on -> update { autoGestureSign = on } },
+                    )
+                )
+                add(
+                    HookSettingRow.Toggle(
+                        title = "签到码自动签到",
+                        summary = "进签到码页自动填码并完成",
+                        checked = cfg.autoCodeSign,
+                        onCheckedChange = { on -> update { autoCodeSign = on } },
+                    )
+                )
             },
         ),
 

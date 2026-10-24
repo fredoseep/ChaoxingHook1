@@ -1,0 +1,135 @@
+package com.fredoseep.chaoxinghook;
+
+import android.util.Log;
+import static com.fredoseep.chaoxinghook.HookConfigRepository.getSignConfig;
+
+/** 手势和签到码自动签到的页面识别、填码及脚本注入。 */
+final class AutoSignHook {
+    private static final String TAG_AUTO_SIGN = "CX.AutoSign";
+    static void onPageFinished(android.webkit.WebView view) {
+        SignConfig cfg = getSignConfig();
+        if (!cfg.autoGestureSign && !cfg.autoCodeSign) return;
+        String cfgLat = cfg.modifyLocation ? cfg.latitude.replaceAll("[^0-9.\\-]", "") : "";
+        String cfgLon = cfg.modifyLocation ? cfg.longitude.replaceAll("[^0-9.\\-]", "") : "";
+        view.evaluateJavascript(buildAutoCodeSignJs(cfg.autoGestureSign, cfg.autoCodeSign, cfgLat, cfgLon),
+                result -> Log.d(TAG_AUTO_SIGN, "自动签到脚本注入结果: " + result));
+    }
+
+    private static String buildAutoCodeSignJs(boolean gestureOn, boolean codeOn, String cfgLat, String cfgLon) {
+        return "(function(){\n"
+                + " 'use strict';\n"
+                + " if(window.__cxAutoCodeV1)return 'already';\n"
+                + " window.__cxAutoCodeV1=true;\n"
+                + " var GESTURE_ON=" + gestureOn + ",CODE_ON=" + codeOn + ";\n"
+                + " var CFG_LAT='" + cfgLat + "',CFG_LON='" + cfgLon + "';\n"
+                + " function st(o){}\n"
+                + " function aidOf(search){try{var q=new URLSearchParams(search);return q.get('activeId')||q.get('activePrimaryId')||'';}catch(e){return '';}}\n"
+                + " function docs(){var a=[document];try{var f=document.querySelectorAll('iframe');for(var i=0;i<f.length;i++){var d=f[i].contentDocument;if(d)a.push(d);}}catch(e){}return a;}\n"
+                + " var tries=0;\n"
+                // 位置解锁：ifopenAddress=1 的页面要等原生定位回调才继续，模拟 jsBridge 推送
+                + " function unlock(d2,aid2){\n"
+                + "  try{\n"
+                + "   var ioa=d2.getElementById('ifopenAddress');\n"
+                + "   if(!ioa||String(ioa.value||'')!=='1'){st({step:'no-loc-needed'});return;}\n"
+                + "   var x2=new XMLHttpRequest();\n"
+                + "   x2.onreadystatechange=function(){\n"
+                + "    if(x2.readyState!==4)return;\n"
+                + "    var lat='',lon='',txt='';\n"
+                + "    try{var j=JSON.parse(x2.responseText);var dd=(j&&j.data)?j.data:j;if(dd){lat=String(dd.locationLatitude||'');lon=String(dd.locationLongitude||'');txt=String(dd.locationText||'');}}catch(e){}\n"
+                + "    if(!lat||!lon){\n"
+                + "     if(CFG_LAT&&CFG_LON){lat=CFG_LAT;lon=CFG_LON;txt='';st({step:'loc-cfg-coords'});}\n"
+                + "     else{st({step:'loc-no-coords',http:x2.status});return;}\n"
+                + "    }else st({step:'loc-api-coords',lat:lat,lon:lon});\n"
+                + "    var loc={result:1,address:txt,longitude:parseFloat(lon),latitude:parseFloat(lat)};\n"
+                + "    setTimeout(function(){\n"
+                + "     try{if(window.jsBridge&&typeof window.jsBridge.trigger==='function'){window.jsBridge.trigger('CLIENT_USER_LOCATION',loc);st({step:'loc-pushed',lat:loc.latitude,lon:loc.longitude});}else st({step:'no-jsbridge'});}catch(e){st({step:'loc-push-fail',err:String(e)});}\n"
+                + "    },1200);\n"
+                + "   };\n"
+                + "   x2.open('GET','/v2/apis/active/getPPTActiveInfo?activeId='+encodeURIComponent(aid2),true);\n"
+                + "   x2.send();\n"
+                + "  }catch(e){}\n"
+                + " }\n"
+                + " function boot(){\n"
+                + "  var ds=docs();\n"
+                + "  for(var i=0;i<ds.length;i++){\n"
+                + "   var d=ds[i];\n"
+                + "   var isG=!!d.getElementById('gesturepwd');\n"
+                + "   var isC=d.querySelectorAll('input[codeIndex]').length>=4;\n"
+                + "   if(!isG&&!isC)continue;\n"
+                + "   var mode=isG?'gesture':'code';\n"
+                + "   if(mode==='gesture'&&!GESTURE_ON)return 'gesture-off';\n"
+                + "   if(mode==='code'&&!CODE_ON)return 'code-off';\n"
+                + "   var oi=d.getElementById('otherId');\n"
+                + "   if(oi&&String(oi.value||'')==='0')return 'skip';\n"
+                + "   var aid=aidOf(location.search);\n"
+                + "   try{var f2=document.querySelectorAll('iframe');for(var k=0;!aid&&k<f2.length;k++)aid=aidOf(f2[k].contentWindow.location.search);}catch(e){}\n"
+                + "   var ai=d.getElementById('activeId');\n"
+                + "   if(!aid&&ai)aid=ai.value;\n"
+                + "   if(!aid)return 'no-aid';\n"
+                + "   var x=new XMLHttpRequest();\n"
+                + "   x.onreadystatechange=function(){\n"
+                + "    if(x.readyState!==4||x.status!==200)return;\n"
+                + "    var rd=new DOMParser().parseFromString(x.responseText,'text/html');\n"
+                + "    var el=rd.getElementById('code');\n"
+                + "    var code=el?String(el.getAttribute('value')||el.value||''):'';\n"
+                + "    if(!/^\\d{4,8}$/.test(code)){st({step:'bad-code'});return;}\n"
+                + "    st({step:'fetched',mode:mode,len:code.length});\n"
+                + "    if(mode==='gesture'){\n"
+                + "     var hidden=d.getElementById('code');\n"
+                + "     var jq=window.jQuery;\n"
+                + "     if(!jq||!jq.fn){try{var f3=document.querySelectorAll('iframe');for(var z=0;z<f3.length;z++){var w=f3[z].contentWindow;if(w.jQuery&&w.jQuery.fn){jq=w.jQuery;break;}}}catch(e){}}\n"
+                + "     if(!jq||!jq.fn)return;\n"
+                // 部分 gesture 模板没有 #code 隐藏域，hasPasswd 处理器自行比对/上报
+                + "     if(hidden)hidden.value=code;\n"
+                + "     st({step:'triggered'});\n"
+                + "     jq('#gesturepwd',d).trigger('hasPasswd',[code]);\n"
+                + "     unlock(d,aid);\n"
+                + "    }else{\n"
+                // 签到码长度 4-8 位可变：格数由活动配置决定（页面按 numberCount 动态补格子），码长必须与格数一致
+                + "     var by={},ins=d.querySelectorAll('input[codeIndex]');\n"
+                + "     for(var n=0;n<ins.length;n++)by[ins[n].getAttribute('codeIndex')]=ins[n];\n"
+                + "     var cnt=ins.length;\n"
+                + "     if(cnt<4||cnt>8||code.length!==cnt)return;\n"
+                // 逐格填写。页面的 keydown 处理器会先清空格子，因此绝不能派发 keydown，只走 input/change；
+                // 填完再同步隐藏主输入框 #mobileInput（移动端真实输入通道）
+                + "     var i2=0;\n"
+                + "     function fillNext(){\n"
+                + "      if(i2>=cnt){\n"
+                + "       try{\n"
+                + "        var mi=d.getElementById('mobileInput');\n"
+                + "        if(mi){\n"
+                + "         try{Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set.call(mi,code);}catch(e){mi.value=code;}\n"
+                + "         mi.dispatchEvent(new Event('input',{bubbles:true}));\n"
+                + "         mi.dispatchEvent(new Event('change',{bubbles:true}));\n"
+                + "         try{if(window.jQuery&&window.jQuery.fn)window.jQuery(mi).trigger('input').trigger('propertychange');}catch(e){}\n"
+                + "        }\n"
+                + "       }catch(e){}\n"
+                + "       st({step:'filled'});\n"
+                + "       unlock(d,aid);\n"
+                + "       return;\n"
+                + "      }\n"
+                + "      var inp=by[String(i2+1)];\n"
+                + "      if(!inp)return;\n"
+                + "      var ch=code.charAt(i2);\n"
+                + "      try{inp.focus();}catch(e){}\n"
+                + "      try{Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set.call(inp,ch);}catch(e){inp.value=ch;}\n"
+                + "      try{inp.dispatchEvent(new Event('input',{bubbles:true}));}catch(e){}\n"
+                + "      try{inp.dispatchEvent(new Event('change',{bubbles:true}));}catch(e){}\n"
+                + "      try{if(window.jQuery&&window.jQuery.fn)window.jQuery(inp).trigger('input');}catch(e){}\n"
+                + "      i2++;\n"
+                + "      setTimeout(fillNext,250);\n"
+                + "     }\n"
+                + "     fillNext();\n"
+                + "    }\n"
+                + "   };\n"
+                + "   x.open('GET','/newsign/gesture?activeId='+encodeURIComponent(aid)+'&type=0',true);\n"
+                + "   x.send();\n"
+                + "   return 'armed';\n"
+                + "  }\n"
+                + "  if(++tries<10){setTimeout(boot,600);return 'pending';}\n"
+                + "  return 'not-found';\n"
+                + " }\n"
+                + " return boot();\n"
+                + "})();\n";
+    }
+}
