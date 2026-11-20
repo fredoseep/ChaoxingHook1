@@ -1,4 +1,4 @@
-package com.fredoseep.chaoxinghook;
+package com.fredoseep.chaoxinghook.function;
 
 import android.util.Log;
 import java.io.File;
@@ -6,13 +6,13 @@ import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam;
-import static com.fredoseep.chaoxinghook.HookConfigRepository.getSignConfig;
-import static com.fredoseep.chaoxinghook.HookConfigRepository.FAKE_UPLOAD_FILE_PATH;
+import static com.fredoseep.chaoxinghook.function.HookConfigRepository.getSignConfig;
+import static com.fredoseep.chaoxinghook.function.HookConfigRepository.FAKE_UPLOAD_FILE_PATH;
 
 /** 考试截图文件替换和旧版截图协议 Hook。 */
-final class ExamImageHook {
+public final class ExamImageHook {
     private static final String TAG_EXAM_IMAGE = "CX.ExamImage";
-    static void installFileReplaceHook(LoadPackageParam lpparam) {
+    public static void installFileReplaceHook(LoadPackageParam lpparam) {
         try {
             XC_MethodHook fileReadHook = new XC_MethodHook() {
                 @Override
@@ -58,7 +58,7 @@ final class ExamImageHook {
         }
     }
 
-    static void installExamSnapshotHook(LoadPackageParam lpparam) {
+    public static void installExamSnapshotHook(LoadPackageParam lpparam) {
         try {
             XposedHelpers.findAndHookMethod(
                     "com.chaoxing.mobile.webapp.jsprotocal.common.f1",

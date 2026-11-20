@@ -1,4 +1,4 @@
-package com.fredoseep.chaoxinghook;
+package com.fredoseep.chaoxinghook.function;
 
 import android.util.Log;
 import java.net.URLEncoder;
@@ -7,8 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import static com.fredoseep.chaoxinghook.HookConfigRepository.getSignConfig;
-import static com.fredoseep.chaoxinghook.SignLocationMath.*;
+import static com.fredoseep.chaoxinghook.function.HookConfigRepository.getSignConfig;
+import static com.fredoseep.chaoxinghook.function.SignLocationMath.*;
 
 /** POST 签到表单桥接、请求关联及距离采样；每个 WebView 单独维护状态。 */
 public final class PostSignHook {

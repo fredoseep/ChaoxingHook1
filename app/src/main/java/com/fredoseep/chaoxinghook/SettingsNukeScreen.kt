@@ -15,6 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.fredoseep.chaoxinghook.function.HookSettingRow
+import com.fredoseep.chaoxinghook.function.buildHookSettingGroups
 import dev.nuke.ui.NukeCountAndChevron
 import dev.nuke.ui.NukeDivider
 import dev.nuke.ui.NukePageScaffold

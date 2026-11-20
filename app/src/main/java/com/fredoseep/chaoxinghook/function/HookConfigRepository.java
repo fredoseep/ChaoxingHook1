@@ -1,4 +1,4 @@
-package com.fredoseep.chaoxinghook;
+package com.fredoseep.chaoxinghook.function;
 
 import android.app.AndroidAppHelper;
 import android.util.Log;

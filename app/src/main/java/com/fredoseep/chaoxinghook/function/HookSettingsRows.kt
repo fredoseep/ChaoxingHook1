@@ -1,4 +1,7 @@
-package com.fredoseep.chaoxinghook
+package com.fredoseep.chaoxinghook.function
+
+import com.fredoseep.chaoxinghook.HookSettingsState
+import com.fredoseep.chaoxinghook.SettingsScaffold
 
 /**
  * 设置项的「行模型」：把原来的 MD3 设置页逐行抽象成与 UI 库无关的描述。

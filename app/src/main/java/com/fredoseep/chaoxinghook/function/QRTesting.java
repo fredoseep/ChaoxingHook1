@@ -1,17 +1,7 @@
-package com.fredoseep.chaoxinghook;
+package com.fredoseep.chaoxinghook.function;
 
 import android.util.Log;
-import android.webkit.WebView;
 
-import org.json.JSONObject;
-
-import java.lang.reflect.Method;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 public class QRTesting {

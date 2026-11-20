@@ -1,4 +1,4 @@
-package com.fredoseep.chaoxinghook;
+package com.fredoseep.chaoxinghook.function;
 
 import android.util.Log;
 import java.io.ByteArrayInputStream;
@@ -14,8 +14,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
-import static com.fredoseep.chaoxinghook.HookConfigRepository.getSignConfig;
-import static com.fredoseep.chaoxinghook.SignLocationMath.*;
+import static com.fredoseep.chaoxinghook.function.HookConfigRepository.getSignConfig;
+import static com.fredoseep.chaoxinghook.function.SignLocationMath.*;
 
 /** 兼容 GET 查询参数形式的定位签到；POST 交由 PostSignHook 处理。 */
 final class LocationSignHook {

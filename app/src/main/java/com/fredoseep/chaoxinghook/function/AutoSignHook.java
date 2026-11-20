@@ -1,7 +1,7 @@
-package com.fredoseep.chaoxinghook;
+package com.fredoseep.chaoxinghook.function;
 
 import android.util.Log;
-import static com.fredoseep.chaoxinghook.HookConfigRepository.getSignConfig;
+import static com.fredoseep.chaoxinghook.function.HookConfigRepository.getSignConfig;
 
 /** 手势和签到码自动签到的页面识别、填码及脚本注入。 */
 final class AutoSignHook {

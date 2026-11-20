@@ -1,15 +1,15 @@
-package com.fredoseep.chaoxinghook;
+package com.fredoseep.chaoxinghook.function;
 
 import android.util.Log;
 import java.io.ByteArrayInputStream;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
-import static com.fredoseep.chaoxinghook.HookConfigRepository.getSignConfig;
+import static com.fredoseep.chaoxinghook.function.HookConfigRepository.getSignConfig;
 
 /** 进程退出、考试上报请求及 H5 生命周期处理。 */
-final class ExamRiskHook {
+public final class ExamRiskHook {
     private static final String TAG_EXAM_RISK = "CX.ExamRisk";
-    static void installProcessExitHook() {
+    public static void installProcessExitHook() {
         XC_MethodHook exitHook = new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) {

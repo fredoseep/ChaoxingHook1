@@ -28,7 +28,7 @@
             android:value="${AMAP_MAP_KEY}" />
 
         <activity
-            android:name=".MapPickerActivity"
+            android:name=".function.MapPickerActivity"
             android:exported="false" />
 
         <meta-data

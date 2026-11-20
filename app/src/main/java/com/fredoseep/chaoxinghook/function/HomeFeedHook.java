@@ -1,4 +1,4 @@
-package com.fredoseep.chaoxinghook;
+package com.fredoseep.chaoxinghook.function;
 
 import android.util.Log;
 import java.lang.reflect.Method;
@@ -6,15 +6,15 @@ import java.util.List;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
 import org.luckypray.dexkit.DexKitBridge;
-import static com.fredoseep.chaoxinghook.HookReflection.*;
+import static com.fredoseep.chaoxinghook.function.HookReflection.*;
 
 /** 首页推荐分类、列表计数和数据库分页处理。 */
-final class HomeFeedHook {
+public final class HomeFeedHook {
     private static final String TAG_CATEGORY = "CX.Category";
     private static final String TAG_RECORD_LIST = "CX.RecordList";
     private static final String TAG_DB_QUERY = "CX.DbQuery";
 
-    static void install(DexKitBridge bridge, ClassLoader loader) {
+    public static void install(DexKitBridge bridge, ClassLoader loader) {
         // 3. MainRecordCategoryHolder.o(ResourceLog) -> V：隐藏"推荐"分类卡片
         try {
             Class<?> clazz = findClassByMethods(bridge, loader, "category-holder",

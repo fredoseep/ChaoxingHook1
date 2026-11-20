@@ -15,16 +15,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
+import com.fredoseep.chaoxinghook.function.ConfigManager
+import com.fredoseep.chaoxinghook.function.EmbeddedSettings
+import com.fredoseep.chaoxinghook.function.MapPickerActivity
 
 /**
  * 三套 UI 风格（MIUIX / Nuke / Material 3）共用的设置页外壳。
  *
- * 业务逻辑只写一份：这里持有 [ConfigManager.HookConfig] 与「实时保存」流程，
+ * 业务逻辑只写一份：这里持有 [com.fredoseep.chaoxinghook.function.ConfigManager.HookConfig] 与「实时保存」流程，
  * 各风格实现只负责把状态渲染成自己的组件语言（行模型见 [HookSettingsRows]）。
  */
 
 /**
- * 设置页数据源。所有变更都立刻落盘（通过本进程文件 API 读写，见 [ConfigManager]）。
+ * 设置页数据源。所有变更都立刻落盘（通过本进程文件 API 读写，见 [com.fredoseep.chaoxinghook.function.ConfigManager]）。
  *
  * 用 [MutableState] 持有配置：hook 配置是 data class，修改必须走 `copy()` ——
  * `mutableStateOf` 按引用比较，原地 apply 不会触发重组。

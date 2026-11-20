@@ -3,6 +3,19 @@ package com.fredoseep.chaoxinghook;
 import android.app.AndroidAppHelper;
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import android.util.Log;
+
+
+import com.fredoseep.chaoxinghook.function.AdvertisementHook;
+import com.fredoseep.chaoxinghook.function.ChatHook;
+import com.fredoseep.chaoxinghook.function.ClipboardPopKiller;
+import com.fredoseep.chaoxinghook.function.ExamImageHook;
+import com.fredoseep.chaoxinghook.function.ExamRiskHook;
+import com.fredoseep.chaoxinghook.function.HomeFeedHook;
+import com.fredoseep.chaoxinghook.function.MsgReadHook;
+import com.fredoseep.chaoxinghook.function.QRTesting;
+import com.fredoseep.chaoxinghook.function.SettingsEntryHook;
+import com.fredoseep.chaoxinghook.function.WebViewHooks;
+
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam;
@@ -29,6 +42,12 @@ public final class MainHook implements IXposedHookLoadPackage {
             Log.i(TAG_INIT, "loadLibrary dexkit OK");
         } catch (Throwable t) {
             Log.e(TAG_INIT, "loadLibrary dexkit FAILED: ", t);
+        }
+
+        try{
+            MsgReadHook.hook(lpparam.classLoader);
+        } catch (Exception e) {
+            Log.e("MsgReadHook","Error at MsgReadHook "+e.getMessage());
         }
 
         try {

@@ -1,10 +1,10 @@
-package com.fredoseep.chaoxinghook;
+package com.fredoseep.chaoxinghook.function;
 
 import android.util.Log;
-import java.io.ByteArrayInputStream;
+
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
-import static com.fredoseep.chaoxinghook.HookConfigRepository.getSignConfig;
+import static com.fredoseep.chaoxinghook.function.HookConfigRepository.getSignConfig;
 
 /** 复制限制 CSS 拦截及页面可选择、可复制脚本。 */
 final class CopyRestrictionHook {

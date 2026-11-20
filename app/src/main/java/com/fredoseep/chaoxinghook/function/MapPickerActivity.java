@@ -1,4 +1,4 @@
-package com.fredoseep.chaoxinghook;
+package com.fredoseep.chaoxinghook.function;
 
 import com.fredoseep.chaoxinghook.BuildConfig;
 
@@ -26,6 +26,7 @@ import com.amap.api.maps.MapView;
 import com.amap.api.maps.MapsInitializer;
 import com.amap.api.maps.model.LatLng;
 import com.amap.api.maps.model.MarkerOptions;
+import com.fredoseep.chaoxinghook.R;
 
 import org.json.JSONArray;
 import org.json.JSONObject;

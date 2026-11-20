@@ -4,6 +4,8 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import com.fredoseep.chaoxinghook.function.ConfigManager
+import com.fredoseep.chaoxinghook.function.EmbeddedSettings
 
 /**
  * 设置页入口：Compose UI，支持 MIUIX（HyperOS）/ Nuke / Material 3 三套风格。

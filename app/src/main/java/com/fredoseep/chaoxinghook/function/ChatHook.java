@@ -1,19 +1,19 @@
-package com.fredoseep.chaoxinghook;
+package com.fredoseep.chaoxinghook.function;
 
 import android.util.Log;
 import java.lang.reflect.Method;
-import java.util.List;
+
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import org.luckypray.dexkit.DexKitBridge;
-import static com.fredoseep.chaoxinghook.HookReflection.*;
+import static com.fredoseep.chaoxinghook.function.HookReflection.*;
 
 /** 聊天推送会话过滤及撤回消息处理。 */
-final class ChatHook {
+public final class ChatHook {
     private static final String TAG_CHAT_FILTER = "CX.ChatFilter";
 
-    static void install(DexKitBridge bridge, ClassLoader loader) {
+    public static void install(DexKitBridge bridge, ClassLoader loader) {
         // 6. 聊天列表过滤：移除 type==20 的官方推送会话
         //    7.0.1：chat.manager.b 的 N2(List,boolean)->void 与 r0(List,boolean)->int
         //    （6.7.8 为 q1.c1()，已消失）；两方法首参均为主界面会话列表，前置过滤即可

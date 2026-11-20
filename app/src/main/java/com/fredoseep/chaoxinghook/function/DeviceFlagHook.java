@@ -1,7 +1,7 @@
-package com.fredoseep.chaoxinghook;
+package com.fredoseep.chaoxinghook.function;
 
 import java.util.Random;
-import static com.fredoseep.chaoxinghook.HookConfigRepository.getSignConfig;
+import static com.fredoseep.chaoxinghook.function.HookConfigRepository.getSignConfig;
 
 /** 设备标识回调替换及随机 flag 生成。 */
 final class DeviceFlagHook {

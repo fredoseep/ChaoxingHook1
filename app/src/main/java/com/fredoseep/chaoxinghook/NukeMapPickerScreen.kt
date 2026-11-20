@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -51,13 +50,13 @@ private const val AMAP_SEARCH_URL = "https://restapi.amap.com/v3/place/text"
 /**
  * 地图选点页 —— **Nuke 风格专属**的窗口内页面。
  *
- * 与 [MapPickerActivity] 的区别：它不是独立 Activity，而是 [SettingsNukeScreen] 里
+ * 与 [com.fredoseep.chaoxinghook.function.MapPickerActivity] 的区别：它不是独立 Activity，而是 [SettingsNukeScreen] 里
  * `NukeRevealStackNavigator` 的一个路由，所以能配合 Nuke 的圆形揭示转场
  * —— 从「地图选点」那一行的触点圆形扩散展开，返回时收缩回去。
  * `MapView` 是 `FrameLayout`（不是 `SurfaceView`），因此会被揭示层的
  * `graphicsLayer { clip = true }` 一起裁切，不是"贴上去"的假动画。
  *
- * MIUIX / Material 3 风格仍走 [MapPickerActivity]（`ActivityResultContracts`）。
+ * MIUIX / Material 3 风格仍走 [com.fredoseep.chaoxinghook.function.MapPickerActivity]（`ActivityResultContracts`）。
  *
  * 地图实例生命周期必须手工接力：`MapView` 是为 Activity 设计的，
  * 在 Compose 里要自己转发 onCreate / onResume / onPause / onDestroy。

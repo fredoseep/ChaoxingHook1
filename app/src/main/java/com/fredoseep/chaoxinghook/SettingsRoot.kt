@@ -11,7 +11,7 @@ import androidx.compose.runtime.Composable
  * | [UiStyle.Nuke] | [SettingsNukeScreen] | Nuke（`dev.nuke.ui`，../nuke） |
  * | [UiStyle.Material3] | [SettingsMaterial3Screen] | Material 3（`androidx.compose.material3`） |
  *
- * 三者的业务逻辑完全共用（[HookSettingsState] + [buildHookSettingGroups] + [SettingsScaffold]），
+ * 三者的业务逻辑完全共用（[HookSettingsState] + [com.fredoseep.chaoxinghook.function.buildHookSettingGroups] + [SettingsScaffold]），
  * 差别只在渲染层。风格存于 [SettingStore]，切换时由 [rememberUiStyleSwitcher] 重建 Activity。
  */
 @Composable

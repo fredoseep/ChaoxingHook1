@@ -1,4 +1,4 @@
-package com.fredoseep.chaoxinghook;
+package com.fredoseep.chaoxinghook.function;
 
 /** DexKit 匹配失败时使用的混淆类名、字段名回退表。 */
 final class ObfuscationMap {

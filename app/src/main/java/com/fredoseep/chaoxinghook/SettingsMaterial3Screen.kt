@@ -33,6 +33,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.fredoseep.chaoxinghook.function.HookSettingRow
+import com.fredoseep.chaoxinghook.function.buildHookSettingGroups
 
 /**
  * 设置页 —— **Material 3** 实现。

@@ -1,4 +1,4 @@
-package com.fredoseep.chaoxinghook;
+package com.fredoseep.chaoxinghook.function;
 
 import android.app.AndroidAppHelper;
 import android.util.Log;
@@ -7,7 +7,7 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 /** 我的页面长按设置入口：生命周期、文本绑定和布局观察。 */
-final class SettingsEntryHook {
+public final class SettingsEntryHook {
     private static final String TAG_SETTINGS = "CX.Settings";
     private static final java.util.WeakHashMap<android.view.View, Boolean> injectedLongPressRows = new java.util.WeakHashMap<>();
 
@@ -16,7 +16,7 @@ final class SettingsEntryHook {
             new java.util.WeakHashMap<>();
 
     /** 生命周期、文字绑定、布局变化共同覆盖首次创建和底部 Tab 切换。 */
-    void install(ClassLoader loader) {
+    public void install(ClassLoader loader) {
         int installed = 0;
         try {
             int count = XposedBridge.hookAllMethods(android.app.Activity.class, "onResume", new XC_MethodHook() {

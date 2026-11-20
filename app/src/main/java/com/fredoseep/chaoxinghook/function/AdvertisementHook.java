@@ -1,17 +1,17 @@
-package com.fredoseep.chaoxinghook;
+package com.fredoseep.chaoxinghook.function;
 
 import android.util.Log;
 import java.lang.reflect.Method;
 import de.robv.android.xposed.XC_MethodHook;
 import org.luckypray.dexkit.DexKitBridge;
-import static com.fredoseep.chaoxinghook.HookReflection.*;
+import static com.fredoseep.chaoxinghook.function.HookReflection.*;
 
 /** 开屏广告及首页头部广告过滤。 */
-final class AdvertisementHook {
+public final class AdvertisementHook {
     private static final String TAG_SPLASH = "CX.Splash";
     private static final String TAG_HOME_HEADER = "CX.HomeHeader";
 
-    static void install(DexKitBridge bridge, ClassLoader loader) {
+    public static void install(DexKitBridge bridge, ClassLoader loader) {
         // 1. SplashViewModel.a(Activity) -> Ad：拦截开屏广告数据（返回 null 使广告不展示）
         try {
             Class<?> clazz = findClassByMethods(bridge, loader, "splash",

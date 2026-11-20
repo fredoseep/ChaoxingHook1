@@ -6,7 +6,7 @@ import androidx.compose.ui.graphics.Color
 /**
  * 设置页可选的三套 UI 风格。
  *
- * 三套风格共用同一份 [ConfigManager.HookConfig] 与同一份业务逻辑，
+ * 三套风格共用同一份 [com.fredoseep.chaoxinghook.function.ConfigManager.HookConfig] 与同一份业务逻辑，
  * 只是渲染层分别走 MIUIX（HyperOS）、Nuke（iOS 果冻风）与 Material 3 组件库。
  *
  * 切换风格会重建 Activity（Compose 的主题无法就地热替换），
@@ -53,7 +53,7 @@ enum class UiStyle(
 }
 
 /**
- * 模块自身的界面偏好（只影响设置页长什么样），与 [ConfigManager] 存放的 hook 配置完全分开。
+ * 模块自身的界面偏好（只影响设置页长什么样），与 [com.fredoseep.chaoxinghook.function.ConfigManager] 存放的 hook 配置完全分开。
  *
  * 刻意不复用 `chaoxing_loc.txt`：那个文件是「学习通进程要读的行为开关」，
  * 写入还需要 root（su cp）。界面偏好没有 root 也必须能保存，所以走本应用私有 SharedPreferences。

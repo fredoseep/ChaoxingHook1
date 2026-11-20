@@ -1,4 +1,4 @@
-package com.fredoseep.chaoxinghook;
+package com.fredoseep.chaoxinghook.function;
 
 import android.util.Log;
 import java.util.HashSet;
@@ -9,12 +9,12 @@ import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam;
 
 /** WebView Hook 注册和事件分发；具体业务由各功能类实现。 */
-final class WebViewHooks {
+public final class WebViewHooks {
     private static final String TAG_WEBVIEW = "CX.WebView";
     private final Set<String> hookedWebViewClients = new HashSet<>();
     private final PostSignHook postSign = new PostSignHook();
 
-    void install(LoadPackageParam lpparam) {
+    public void install(LoadPackageParam lpparam) {
         try {
             Class<?> webViewClass = XposedHelpers.findClass("android.webkit.WebView", lpparam.classLoader);
             XposedBridge.hookAllMethods(webViewClass, "setWebViewClient", new XC_MethodHook() {

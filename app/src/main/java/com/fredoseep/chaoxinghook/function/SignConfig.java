@@ -1,4 +1,4 @@
-package com.fredoseep.chaoxinghook;
+package com.fredoseep.chaoxinghook.function;
 
 /** 宿主 Hook 使用的配置快照；字段与现有配置文件保持一致。 */
 final class SignConfig {
